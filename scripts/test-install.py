@@ -101,8 +101,11 @@ else: fail()
 '''
 FAKE_AGENT = r'''#!/usr/bin/env python3
 import json, os, pathlib, sys
-args = sys.argv[1:]; root = pathlib.Path(args[args.index('--root') + 1])
+args = sys.argv[1:]
 version = '__VERSION__'
+if args == ['--version']:
+    print(os.environ.get('MOCK_AGENT_VERSION', version)); sys.exit(0)
+root = pathlib.Path(args[args.index('--root') + 1])
 with (pathlib.Path(os.environ['MOCK_BASE']) / 'events').open('a') as out:
     out.write('agent-' + args[0] + '-' + version + '\n')
 if args[0] == 'install':
@@ -241,6 +244,19 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.current(), 'v0.1.0')
         self.assertIn(AGENT, self.active())
         self.assertIn('Xray-linux-64.zip', self.events())
+
+    def test_initial_fixed_newer_version(self):
+        args = ['--control-url', 'https://control.example', '--address', '203.0.113.10',
+                '--port', '443', '--server-name', 'www.example.com', '--version', 'v0.2.0', '--repo', 'owner/repo']
+        self.call(args, PROXYSETTING_ENROLL_TOKEN=TOKEN)
+        self.assertEqual(self.current(), 'v0.2.0')
+        self.assertIn(AGENT, self.active())
+
+    def test_binary_version_mismatch_refused(self):
+        self.call(expected=1, MOCK_AGENT_VERSION='v9.9.9')
+        self.assertNotIn('agent-install-', self.events())
+        self.assertEqual(self.active(), [])
+        self.assertFalse((self.root / 'current').exists())
 
     def test_unsupported_os_arch_nonroot_and_no_systemd(self):
         (self.base / 'os-release').write_text('ID=fedora\n')

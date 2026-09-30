@@ -1,6 +1,6 @@
 # 部署 Cloudflare 免费版
 ## 准备发布
-公开GitHub仓库，代码推送后按 `.github/workflows/release.yml` 发布固定tag（首版 `v0.1.0`）；Release需有 install.sh、两架构agent包和SHA256SUMS。首次执行脚本不能仅依赖同一下载源的校验文件：管理员审核源码/CI，取固定install.sh的SHA256，填Worker `INSTALL_SHA256`。Xray官方版本/哈希内置安装器，不用latest下载。
+公开GitHub仓库，代码推送后按 `.github/workflows/release.yml` 发布固定tag（可用首发 `v0.1.1`）；Release需有 install.sh、两架构agent包和SHA256SUMS。首次执行脚本不能仅依赖同一下载源的校验文件：管理员审核源码/CI，取固定install.sh的SHA256，填Worker `INSTALL_SHA256`。Xray官方版本/哈希内置安装器，不用latest下载。
 
 ## D1、Worker与Secrets
 ```
@@ -8,7 +8,7 @@ npm ci
 npx wrangler login
 npx wrangler d1 create proxysetting
 ```
-把返回ID写入 `wrangler.jsonc` 的 database_id。按需修改Worker名称；配置 `RELEASE_REPO=owner/repo`、`RELEASE_VERSION=v0.1.0`。
+把返回ID写入 `wrangler.jsonc` 的 database_id。按需修改Worker名称；配置 `RELEASE_REPO=owner/repo`、`RELEASE_VERSION=v0.1.1`。
 ```
 npx wrangler secret put UUID_KEY
 npx wrangler secret put INSTALL_SHA256

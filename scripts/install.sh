@@ -5,7 +5,6 @@ set -Eeuo pipefail
 umask 077
 
 readonly XRAY_VERSION='v26.3.27'
-readonly INITIAL_VERSION='v0.1.0'
 readonly AGENT_UNIT='proxysetting-agent.service'
 readonly XRAY_UNIT='proxysetting-xray.service'
 ROOT='/opt/proxysetting'
@@ -16,7 +15,7 @@ WORK='' OLD_RELEASE='' NEW_RELEASE='' TRANSACTION=0 SUCCESS=0
 say() { printf '%s\n' "$*"; }
 die() { printf 'proxysetting: %s\n' "$*" >&2; exit 1; }
 usage() {
-    say 'install.sh --control-url HTTPS_URL --address IP --port PORT --server-name HOST --version v0.1.0 --repo OWNER/REPO [--root /opt/proxysetting]'
+    say 'install.sh --control-url HTTPS_URL --address IP --port PORT --server-name HOST --version vMAJOR.MINOR.PATCH --repo OWNER/REPO [--root /opt/proxysetting]'
     say 'Supply PROXYSETTING_ENROLL_TOKEN in the environment; --token is supported but exposes it in process arguments.'
     say 'install.sh --upgrade --root ROOT --version VERSION [--repo OWNER/REPO]'
     say 'install.sh --rollback --root ROOT'
@@ -27,7 +26,7 @@ while (($#)); do
             [[ $MODE == install ]] || die 'choose only one operation'
             MODE=${1#--}; shift ;;
         --control-url|--address|--port|--server-name|--version|--repo|--root|--token)
-            (($# >= 2)) && [[ -n $2 && $2 != --* ]] || die 'missing option value'
+            if (($# < 2)) || [[ -z $2 || $2 == --* ]]; then die 'missing option value'; fi
             case "$1" in
                 --control-url) CONTROL_URL=$2 ;; --address) ADDRESS=$2 ;; --port) PORT=$2 ;;
                 --server-name) SERVER_NAME=$2 ;; --version) VERSION=$2 ;; --repo) REPO=$2 ;;
@@ -88,7 +87,9 @@ resolve_release() {
     [[ -L $link ]] || die 'missing managed release link'
     target=$(readlink -- "$link")
     version=${target##*/}
-    valid_version "$version" && [[ $target == "$ROOT/releases/$version" && -d $target && ! -L $target ]] || die 'release link escapes managed releases'
+    if ! valid_version "$version" || [[ $target != "$ROOT/releases/$version" || ! -d $target || -L $target ]]; then
+        die 'release link escapes managed releases'
+    fi
     owned_file "$target/bin/proxysetting-agent"
     owned_file "$target/bin/xray"
     printf '%s\n' "$target"
@@ -167,7 +168,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
 if [[ $MODE == install ]]; then
-    [[ $VERSION == "$INITIAL_VERSION" ]] || die 'initial install is locked to v0.1.0'
+    valid_version "$VERSION" || die 'initial install requires a fixed vMAJOR.MINOR.PATCH version'
     valid_repo "$REPO" || die 'repo must be OWNER/REPO'
     [[ $CONTROL_URL =~ ^https://[^[:space:]?#]+$ && $CONTROL_URL != *'@'* ]] || die 'control URL must be HTTPS without userinfo, query or fragment'
     [[ -n $ADDRESS && -n $SERVER_NAME && -n $TOKEN ]] || die 'address, server name and enrollment token are required'
@@ -257,6 +258,7 @@ stage_release() {
     [[ -s $WORK/release/bin/xray ]] || die 'official Xray archive has no binary'
     install -m 0755 "$WORK/install.sh" "$WORK/release/install.sh"
     chmod 0755 "$WORK/release/bin/"*; chmod 0644 "$WORK/release/packaging/"*
+    [[ $("$WORK/release/bin/proxysetting-agent" --version) == "$VERSION" ]] || die 'agent binary version does not match pinned release'
     install -d -m 0755 "$ROOT/releases"
     mv -- "$WORK/release" "$NEW_RELEASE"
 }

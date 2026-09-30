@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "proxysetting",
+  "account_id": "2460306f2178680b86fe6152f7d8e7ab",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-09-29",
   "workers_dev": true,
@@ -13,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "proxysetting",
-      "database_id": "REPLACE_WITH_D1_ID",
+      "database_id": "dd4d1b6b-3c25-4d2a-8db7-c248174a354b",
       "migrations_dir": "migrations",
     },
   ],
@@ -22,6 +23,6 @@
     "ACCESS_AUD": "REPLACE",
     "ADMIN_EMAILS": "jiannlee22@gmail.com",
     "RELEASE_REPO": "JIAnnLee22/proxysetting",
-    "RELEASE_VERSION": "v0.1.0",
+    "RELEASE_VERSION": "v0.1.1",
   },
 }

@@ -1,5 +1,5 @@
 # VPS 安装、升级与恢复
-支持Debian/Ubuntu/Arch Linux、systemd、amd64/arm64，root执行。Xray固定官方 `v26.3.27`，ZIP SHA256内置；首版agent `v0.1.0`。VPS无需自有域名。**不要在已有代理机器上直接覆盖**：安装器拒绝非空root、同名systemd服务、443/所选端口和API10085占用。
+支持Debian/Ubuntu/Arch Linux、systemd、amd64/arm64，root执行。Xray固定官方 `v26.3.27`，ZIP SHA256内置；可用首发agent `v0.1.1`。VPS无需自有域名。**不要在已有代理机器上直接覆盖**：安装器拒绝非空root、同名systemd服务、443/所选端口和API10085占用。
 
 ## 安装
 1. 先人工安装必要工具：Debian/Ubuntu上 `apt-get update && apt-get install -y curl tar unzip iproute2 util-linux coreutils`。Arch Linux使用 `pacman -Syu --needed curl tar unzip iproute2 util-linux coreutils ca-certificates`。安装器不自动改包管理器/防火墙。
@@ -25,7 +25,7 @@ Web“升级版本”输入固定 `vMAJOR.MINOR.PATCH`，Worker只读取已配�
 /opt/proxysetting/current/install.sh --upgrade --root /opt/proxysetting --version v0.1.1
 /opt/proxysetting/current/install.sh --rollback --root /opt/proxysetting
 ```
-首版安装只锁v0.1.0；更高初装版本需在后续release中同步更新安装器版本锁。旧config schema兼容性由后续release负责，当前不自动迁移任意格式。
+初装必须显式指定固定 `vMAJOR.MINOR.PATCH`，不接受latest；Web命令由Worker锁定发行版本和安装器SHA256。安装器还核对agent编译版本与所指定release一致。旧config schema兼容性由后续release负责，当前不自动迁移任意格式。
 改过systemd unit、有drop-ins、仓库不匹配或release目录已存在会拒绝。失败版本目录保留供检查，重试之前仅移除经确认失败的releases/VERSION。断电/SIGKILL不可完整事务恢复，可能服务保持停止，应人工用previous/config备份恢复并确认state不回退。
 
 ## 撤销、凭据轮换与重装

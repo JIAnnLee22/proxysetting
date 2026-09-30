@@ -24,7 +24,7 @@ import (
 )
 
 // Set by release CI: -ldflags="-X main.version=vX.Y.Z".
-var version = "v0.1.0"
+var version = "v0.1.1"
 var errCLI = errors.New("usage: proxysetting-agent install|run|check|rotate --root ROOT")
 
 func execute(ctx context.Context, args []string, out io.Writer) error {

@@ -31,7 +31,7 @@
 
 ## 执行记录与实际差异（2026-09-30）
 - 六个实施步骤的代码、文档与可运行本地验证已实现。源码从空目录建立 Git 初始契约提交，用独立 worktree 实施并审查合并；未提交用户的新实现，也未发布GitHub Release或部署真实Cloudflare。完整结果见 `docs/verification.md`。
-- 固定 Xray 官方 `v26.3.27`；Go官方模块对应 `v1.260327.0`，Go 1.26+；官方amd64/arm64 ZIP SHA256写入安装器。Node 24，npm lockfile锁定工具链。首版初装锁定v0.1.0；后续初装新版本需要同版本release更新安装器的初装锁。
+- 固定 Xray 官方 `v26.3.27`；Go官方模块对应 `v1.260327.0`，Go 1.26+；官方amd64/arm64 ZIP SHA256写入安装器。Node 24，npm lockfile锁定工具链。首次实现曾将初装锁为v0.1.0；公开CI修订后改为显式固定语义版本（拒绝latest）加agent编译版本匹配，Web仍锁定具体Release及安装器SHA256。
 - 数据契约补充当前月云端usage seed：重装空root按每方向max(local,reported)恢复已经上报的用量，不把已用额度清零。尚未上报的窗口仍需本地state备份。首版只接收公网字面IPv4/IPv6；GiB支持小数，向上舍入至整数byte。未部署VPS可从Web编辑地址/端口/目标（443冲突时改其他端口），同时使旧注册令牌失效；已注册设备禁止在线修改这些固定参数，需显式重装。
 - 日汇总具体采用“月累计用量的日末观测快照”，不是精确日账单，页面和文档明确标注；月计量仍为上下行累计。跨月aggregate计数无法精确切分，首个跨月采样窗口最多约10秒不计入新月，是额外非计费级计量边界。
 - 网络同步/发布下载使用独立异步任务，只有本地采样主循环修改持久化状态，Cloudflare慢请求不阻塞10秒限额。systemd停止Xray使用no-block避免关闭排序死锁；WatchdogSignal=SIGKILL防SIGSTOP卡死等待core dump，Xray BindsTo/PartOf agent，静态clients为空。
@@ -40,7 +40,7 @@
 - **未完成外部上线验收**：真实Cloudflare账号/Access路径政策/D1、公开GitHub Release一行首装及升级、Debian/Ubuntu×amd64/arm64四种真实安装环境、Verge Rev桌面人工导入/公网云安全组可达性。提供的Arch机测试不替代该矩阵；这些项需要部署数据/环境后继续。
 
 ## 用户追加：GitHub发布与Arch测试机部署
-- 发布仓库明确为 `git@github.com:JIAnnLee22/proxysetting.git`，公开仓库；首版tag `v0.1.0`，GitHub Actions生成安装器/双架构包/SHA256SUMS。不包含私钥、凭据、本地测试数据或构建缓存。
-- 管理员邮箱明确为 `jiannlee22@gmail.com`。Cloudflare账号目前未登录，D1 ID及Access team/aud仍待真实配置；不能用测试mock冒充线上注册接口。
+- 发布仓库明确为 `git@github.com:JIAnnLee22/proxysetting.git`，公开仓库；保留首个tag `v0.1.0`（CI旧ShellCheck兼容性失败，未发布资产），修复版本为 `v0.1.1`，不重写旧tag；GitHub Actions生成安装器/双架构包/SHA256SUMS，并允许固定tag的人工dispatch发布。不包含私钥、凭据、本地测试数据或构建缓存。
+- 管理员邮箱明确为 `jiannlee22@gmail.com`。用户已完成Wrangler OAuth登录；新建独立proxysetting D1并应用migration，Worker真实部署至 `https://proxysetting.jiannlee22.workers.dev`。旧sing-box-subscription数据库未改动。UUID_KEY随机生成且以忽略目录0600文件备份。OAuth没有Access管理权限（403）；team/aud及边缘Access路径策略仍需配置，当前页面/管理API匿名访问401，不放宽鉴权。
 - 用户明确要求在已授权Arch测试机上停用sing-box并安装本项目，不要求生产式迁移。原Debian/Ubuntu限制扩展为Debian/Ubuntu/Arch Linux（amd64/arm64）；安装器与回归测试同步更新，已有的Xray版本锁定和服务归属/端口保护不变。
 - 测试机sing-box已停止、取消开机启动并mask，TCP/UDP443已释放，配置保留在root私有备份目录。后续安装仅等待经校验的正式Release和可访问的真实Worker注册接口；不会为此假设Cloudflare已部署。

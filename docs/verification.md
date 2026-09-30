@@ -2,7 +2,7 @@
 ## 已通过
 - Node 24：`npm run verify`（TypeScript、Vitest、真实本地D1 migration、Worker assets/API dry-run），24测试通过；`npm audit`零已知漏洞。
 - Go 1.26.7：单测、`go vet ./...`、`go test -race ./...`；Linux amd64/arm64 `CGO_ENABLED=0 go build`，发布ldflags版本v0.1.0可核对。
-- `python3 scripts/test-install.py`：27模拟测试（两架构/Debian、Ubuntu、Arch入口、二次执行、非空root、端口、注册失败、hash错误、archive成员、服务归属、升级回滚和状态不可回退）；`shellcheck scripts/*.sh`、Bash语法通过。
+- `python3 scripts/test-install.py`：29模拟测试（固定新版本初装/编译版本不符拒绝、两架构/Debian、Ubuntu、Arch入口、二次执行、非空root、端口、注册失败、hash错误、archive成员、服务归属、升级回滚和状态不可回退）；`shellcheck scripts/*.sh`、Bash语法通过。
 - SHA256校验官方Xray v26.3.27 amd64产物后真实集成：TLS1.3本地伪装目标+Reality客户端→TCP echo→用户上下行计量→持久化后RemoveUser→新连接失败、旧连接继续计量→北京时间次月AddUser恢复→控制面离线缓存额度→意外Xray停止检测。复现：`XRAY_BIN=/path/to/verified/xray CGO_ENABLED=0 go test ./internal/daemon -run TestRealXrayRuntime -v -count=1`。不依赖公网代理目标，不修改宿主systemd。
 - 官方Mihomo v1.19.31 amd64产物SHA256校验后 `mihomo -t` 验证VLESS/Reality配置及ownership扩展字段；Verge脚本VM fixtures覆盖嵌套select、空配置、重复执行、同名冲突/恶意名称。
 
@@ -20,7 +20,7 @@
 测试结束移除临时服务/目录；核对原443监听进程和UFW输出完全未变。可复现辅助脚本 `scripts/test-systemd-vps.py` 必须仅在明确授权的隔离/测试host上以root运行，默认拒绝既有proxysetting服务/root；它不是生产安装器，也不证明Cloudflare部署成功。
 
 ## 仍需外部验收
-- 真实Cloudflare账户D1/Access/Worker部署、workers.dev路径策略、GitHub公开Release首次安装及升级链路。
+- Cloudflare真实D1 migration和Worker已部署；匿名页面/管理API和无凭据设备API均401。Access team/aud及workers.dev路径策略仍需完成（OAuth管理Access返回403）；GitHub公开Release首次安装及升级链路仍待验证。
 - Debian/Ubuntu×amd64/arm64四种真实镜像/VM生产安装（当前仅cross-build/模拟入口验证，真实提供的机器是Arch）。
 - Verge Rev桌面人工导入以及实际公网端口/云安全组可达性。
 - 真实自然月长时运行边界；本地跨月验证使用受控时钟，不更改VPS系统时钟。
