@@ -239,9 +239,22 @@ it("snapshots batch/duplicate/new revision and usage cannot move backwards", asy
     req(`admin/vps/${vpsId}/grants`, "PUT", { identityId, quotaGiB: 11 }),
     env,
   );
+  // Status is syncing after grant update, but export is still valid with full Reality params
+  const outputSyncing = await adminRoutes(
+    req(`admin/export?identity=${identityId}`),
+    env,
+  );
+  expect(await outputSyncing.text()).toContain("reality-opts");
+  // Truly unready VPS (e.g. pending/unregistered) must reject export
+  await env.DB.prepare("UPDATE vps SET status='pending' WHERE id=?")
+    .bind(vpsId)
+    .run();
   await expect(
     adminRoutes(req(`admin/export?identity=${identityId}`), env),
   ).rejects.toThrow("not ready");
+  await env.DB.prepare("UPDATE vps SET status='ready' WHERE id=?")
+    .bind(vpsId)
+    .run();
 });
 it("rotation invalidates old credential and revocation rejects current device", async () => {
   const old = credential;

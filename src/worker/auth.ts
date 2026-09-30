@@ -51,6 +51,12 @@ export async function adminAuth(request: Request, env: Env) {
   assert(difference === 0, "Invalid administrator credentials", 401);
   mutationGuard(request);
 }
+export async function checkAdminStatus(request: Request, env: Env): Promise<boolean> {
+  const authorization = request.headers.get("Authorization");
+  if (!authorization) return false;
+  await adminAuth(request, env);
+  return true;
+}
 export async function deviceAuth(request: Request, env: Env) {
   const m = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(
     request.headers.get("Authorization") || "",

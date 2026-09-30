@@ -24,7 +24,7 @@ export async function exportVerge(env: Env, identityId: string) {
   const nodes = [];
   for (const v of all.results) {
     assert(
-      v.status === "ready" &&
+      (v.status === "ready" || v.status === "syncing") &&
         !v.revoked &&
         v.public_key &&
         v.short_id &&

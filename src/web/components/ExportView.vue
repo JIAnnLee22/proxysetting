@@ -9,8 +9,11 @@ import {
   Check,
   ShieldAlert,
   Sparkles,
-  Terminal
+  Terminal,
+  Server,
+  AlertCircle
 } from '@lucide/vue'
+import { bytesToGiB } from '../lib/analytics'
 
 const props = defineProps<{
   state: any
@@ -25,6 +28,22 @@ const enabledIdentities = computed(() => {
   return (props.state?.identities || []).filter((i: any) => i.enabled)
 })
 
+// Nodes overview for selected identity
+const selectedIdentityNodes = computed(() => {
+  if (!selectedIdentity.value || !props.state?.vps) return []
+  return props.state.vps.map((v: any) => {
+    const grant = props.state.grants?.find((g: any) => g.vps_id === v.id && g.identity_id === selectedIdentity.value)
+    return {
+      id: v.id,
+      name: v.name,
+      address: v.address,
+      port: v.port,
+      status: v.status,
+      quotaGiB: grant ? bytesToGiB(grant.quota_bytes, 1) : null
+    }
+  })
+})
+
 async function handleGenerate() {
   if (!selectedIdentity.value) {
     showToast('请选择要导出的身份', 'warning')
@@ -37,7 +56,13 @@ async function handleGenerate() {
     scriptContent.value = res
     showToast('脚本生成成功！', 'success')
   } catch (e: any) {
-    showToast(e.message || '导出脚本失败', 'error')
+    let msg = e.message || '导出脚本失败'
+    if (msg.includes('is not ready or missing Reality parameters')) {
+      msg = '有节点尚未安装就绪或未完成部署，请检查 VPS 节点状态'
+    } else if (msg.includes('Monthly quota missing')) {
+      msg = '该身份在部分节点上尚未分配月额度，请在“身份与额度”页面设置配额'
+    }
+    showToast(msg, 'error', 4500)
   } finally {
     generating.value = false
   }
@@ -114,6 +139,54 @@ function handleDownload() {
               <Sparkles class="w-4 h-4" />
               <span>{{ generating ? '生成中...' : '生成扩展脚本' }}</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Authorized Nodes Status Indicator -->
+        <div v-if="selectedIdentityNodes.length > 0" class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800">
+          <div class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+              <Server class="w-3.5 h-3.5 text-blue-500" />
+              <span>该身份的节点授权与就绪状态</span>
+            </span>
+            <span class="text-[11px] text-slate-400 font-normal">共 {{ selectedIdentityNodes.length }} 个节点</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div
+              v-for="node in selectedIdentityNodes"
+              :key="node.id"
+              class="px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-xs"
+            >
+              <div class="flex items-center gap-2">
+                <span
+                  class="w-2 h-2 rounded-full"
+                  :class="[
+                    node.status === 'ready' ? 'bg-emerald-500' :
+                    node.status === 'syncing' ? 'bg-blue-500 animate-pulse' :
+                    node.status === 'pending' ? 'bg-amber-500' :
+                    'bg-slate-400'
+                  ]"
+                ></span>
+                <span class="font-medium text-slate-800 dark:text-slate-200">{{ node.name }}</span>
+                <span class="text-[11px] font-mono text-slate-400">({{ node.status }})</span>
+              </div>
+
+              <div>
+                <span
+                  v-if="node.quotaGiB !== null"
+                  class="text-[11px] font-semibold text-blue-600 dark:text-blue-400"
+                >
+                  {{ node.quotaGiB }} GiB
+                </span>
+                <span
+                  v-else
+                  class="text-[11px] text-rose-500 font-medium"
+                >
+                  未分配月额度
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

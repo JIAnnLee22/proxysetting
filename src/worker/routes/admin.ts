@@ -13,6 +13,7 @@ import {
   hash,
 } from "../core";
 import { exportVerge } from "../export-verge";
+import { checkAdminStatus, adminAuth } from "../auth";
 import type { Env, Grant, Identity, VPS } from "../types";
 function release(env: Env, version = env.RELEASE_VERSION) {
   assert(
@@ -35,6 +36,7 @@ export async function adminRoutes(
       path,
     );
   if (path === "/api/admin/state" && request.method === "GET") {
+    const isAdmin = await checkAdminStatus(request, env);
     const [vps, identities, grants, snapshots] = await Promise.all([
       env.DB.prepare(
         "SELECT id,name,address,port,server_name,revision,public_key,short_id,status,version,last_sync,error,revoked FROM vps ORDER BY created_at",
@@ -52,7 +54,12 @@ export async function adminRoutes(
         payload: JSON.parse(s.payload as string),
       })),
       calendar: calendar(),
+      isAdmin,
     });
+  }
+  if (path === "/api/admin/login" && request.method === "POST") {
+    await adminAuth(request, env);
+    return json({ ok: true, isAdmin: true });
   }
   if (path === "/api/admin/vps" && request.method === "POST") {
     const b = await body(request);

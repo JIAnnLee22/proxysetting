@@ -71,18 +71,34 @@ it("fails closed when the administrator password is missing or invalid", async (
     expect(response.headers.has("WWW-Authenticate")).toBe(false);
   }
 });
-it("protects assets and the admin API with a browser Basic login challenge", async () => {
-  for (const path of [
-    "/",
-    "/app.js",
-    "/style.css",
-    "/api/admin/state",
-    "/api/admin/export",
-  ]) {
+it("allows public access to assets without authentication challenge", async () => {
+  const fetch = vi.fn(async () => new Response("asset"));
+  for (const path of ["/", "/index.html", "/style.css"]) {
     const response = await worker.fetch(
       new Request("https://app.example" + path, {
-        // The old Access header alone must no longer authenticate requests.
         headers: { "Cf-Access-Jwt-Assertion": "old-access-token" },
+      }),
+      { ...env, ASSETS: { fetch } } as unknown as Env,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.has("WWW-Authenticate")).toBe(false);
+  }
+});
+it("protects sensitive admin operations with a browser Basic login challenge", async () => {
+  for (const [path, method, body] of [
+    ["/api/admin/vps", "POST", '{"name":"test","address":"1.2.3.4","port":443,"serverName":"example.com"}'],
+    ["/api/admin/identities", "POST", '{"name":"alice"}'],
+    ["/api/admin/usage", "GET", undefined],
+    ["/api/admin/login", "POST", "{}"],
+  ] as const) {
+    const response = await worker.fetch(
+      new Request("https://app.example" + path, {
+        method,
+        headers: {
+          Origin: "https://app.example",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body,
       }),
       env,
     );
@@ -183,4 +199,33 @@ it("checks same-origin JSON even after valid password authentication", async () 
       env,
     ),
   ).resolves.toBeUndefined();
+});
+it("allows public state inspection while differentiating administrator status", async () => {
+  const DB = {
+    prepare: vi.fn(() => ({
+      bind: vi.fn(() => ({ all: vi.fn(async () => ({ results: [] })) })),
+      all: vi.fn(async () => ({ results: [] })),
+    })),
+  };
+  const mockEnv = { ...env, DB } as unknown as Env;
+
+  // Guest request without Authorization
+  const guestRes = await worker.fetch(
+    new Request("https://app.example/api/admin/state"),
+    mockEnv,
+  );
+  expect(guestRes.status).toBe(200);
+  const guestData = (await guestRes.json()) as any;
+  expect(guestData.isAdmin).toBe(false);
+
+  // Admin request with Authorization
+  const adminRes = await worker.fetch(
+    new Request("https://app.example/api/admin/state", {
+      headers: { Authorization: basic() },
+    }),
+    mockEnv,
+  );
+  expect(adminRes.status).toBe(200);
+  const adminData = (await adminRes.json()) as any;
+  expect(adminData.isAdmin).toBe(true);
 });

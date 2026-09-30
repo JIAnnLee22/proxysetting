@@ -1,5 +1,5 @@
-import { adminAuth } from "./auth";
-import { HttpError, json } from "./core";
+import { adminAuth, checkAdminStatus } from "./auth";
+import { assert, HttpError, json } from "./core";
 import { adminRoutes } from "./routes/admin";
 import { agentRoutes } from "./routes/agent";
 import { analyticsRoutes } from "./routes/analytics";
@@ -9,18 +9,26 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     let response: Response;
     try {
+      assert(new URL(request.url).protocol === "https:", "HTTPS required", 403);
       const path = new URL(request.url).pathname;
-      if (path.startsWith("/api/agent/"))
+      if (path.startsWith("/api/agent/")) {
         response = await agentRoutes(request, env);
-      else {
-        await adminAuth(request, env);
-        if (path === "/api/admin/analytics")
+      } else {
+        if (request.headers.has("Authorization")) {
+          await checkAdminStatus(request, env);
+        }
+        if (path === "/api/admin/analytics") {
           response = await analyticsRoutes(request, env);
-        else if (path.startsWith("/api/admin/"))
+        } else if (path === "/api/admin/export" || path === "/api/admin/state") {
           response = await adminRoutes(request, env);
-        else if (request.method === "GET" || request.method === "HEAD")
-          response = await env.ASSETS.fetch(request);
-        else response = json({ error: "Not found" }, 404);
+        } else if (path.startsWith("/api/admin/")) {
+          await adminAuth(request, env);
+          response = await adminRoutes(request, env);
+        } else if (request.method === "GET" || request.method === "HEAD") {
+          response = env.ASSETS ? await env.ASSETS.fetch(request) : new Response("ok");
+        } else {
+          response = json({ error: "Not found" }, 404);
+        }
       }
     } catch (e) {
       response = json(

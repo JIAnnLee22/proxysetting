@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { initTheme } from './lib/theme'
+import { initAuth, isAdmin, clearAdminAuth } from './lib/auth'
 import { api } from './lib/api'
 import { showToast } from './lib/toast'
 import type { PeriodData } from './lib/analytics'
@@ -12,6 +13,7 @@ import IdentitiesView from './components/IdentitiesView.vue'
 import VpsView from './components/VpsView.vue'
 import ExportView from './components/ExportView.vue'
 import HistoryModal from './components/HistoryModal.vue'
+import LoginModal from './components/LoginModal.vue'
 
 import {
   Activity,
@@ -34,24 +36,36 @@ const timeDimension = ref('daily')
 const loadingStats = ref(false)
 
 const showHistoryModal = ref(false)
+const showLoginModal = ref(false)
 
-// Tabs definition
-const tabs = computed(() => [
-  { id: 'overview', label: '总览监控', icon: Activity },
-  {
-    id: 'identities',
-    label: '身份与额度',
-    icon: Users,
-    count: state.value?.identities?.length
-  },
-  {
-    id: 'vps',
-    label: 'VPS 节点',
-    icon: Server,
-    count: state.value?.vps?.length
-  },
-  { id: 'export', label: '订阅导出', icon: FileCode }
-])
+// Tabs definition based on auth status:
+// Guests only see Overview (流量监控) and Export (订阅导出)
+// Admins see all 4 tabs (Overview, Identities & Quotas, VPS Nodes, Export)
+const tabs = computed(() => {
+  if (!isAdmin.value) {
+    return [
+      { id: 'overview', label: '总览监控', icon: Activity },
+      { id: 'export', label: '订阅导出', icon: FileCode }
+    ]
+  }
+
+  return [
+    { id: 'overview', label: '总览监控', icon: Activity },
+    {
+      id: 'identities',
+      label: '身份与额度',
+      icon: Users,
+      count: state.value?.identities?.length
+    },
+    {
+      id: 'vps',
+      label: 'VPS 节点',
+      icon: Server,
+      count: state.value?.vps?.length
+    },
+    { id: 'export', label: '订阅导出', icon: FileCode }
+  ]
+})
 
 const currentData = computed(() => {
   if (timeDimension.value === 'yearly') return yearlyData.value
@@ -91,7 +105,11 @@ async function refreshAll() {
   loading.value = true
   error.value = ''
   try {
-    state.value = await api('state')
+    const res = await api('state')
+    state.value = res
+    if (typeof res?.isAdmin === 'boolean') {
+      isAdmin.value = res.isAdmin
+    }
     await fetchStats()
   } catch (e: any) {
     error.value = e.message || '获取系统状态失败'
@@ -106,20 +124,46 @@ function handleSelectTab(id: string) {
   window.location.hash = id
 }
 
+function handleLogout() {
+  clearAdminAuth()
+  showToast('已退出管理员模式，切回访客控制台', 'info')
+  if (['identities', 'vps'].includes(currentTab.value)) {
+    handleSelectTab('overview')
+  }
+  refreshAll()
+}
+
+// Watch admin status change
+watch(isAdmin, (val) => {
+  if (!val && ['identities', 'vps'].includes(currentTab.value)) {
+    handleSelectTab('overview')
+  }
+})
+
 onMounted(() => {
   initTheme()
+  initAuth()
   refreshAll()
 
   // Hash route
   const hash = window.location.hash.slice(1)
   if (['overview', 'identities', 'vps', 'export'].includes(hash)) {
-    currentTab.value = hash
+    // If not admin and requested admin tab, fallback to overview
+    if (!isAdmin.value && ['identities', 'vps'].includes(hash)) {
+      currentTab.value = 'overview'
+    } else {
+      currentTab.value = hash
+    }
   }
 
   window.addEventListener('hashchange', () => {
     const newHash = window.location.hash.slice(1)
     if (['overview', 'identities', 'vps', 'export'].includes(newHash)) {
-      currentTab.value = newHash
+      if (!isAdmin.value && ['identities', 'vps'].includes(newHash)) {
+        currentTab.value = 'overview'
+      } else {
+        currentTab.value = newHash
+      }
     }
   })
 })
@@ -133,9 +177,12 @@ onMounted(() => {
       :tabs="tabs"
       :loading="loading"
       :current-month="state?.calendar?.month"
+      :is-admin="isAdmin"
       @select-tab="handleSelectTab"
       @refresh="refreshAll"
       @open-history="showHistoryModal = true"
+      @open-login="showLoginModal = true"
+      @logout="handleLogout"
     />
 
     <!-- Toast Notification Hub -->
@@ -173,7 +220,7 @@ onMounted(() => {
 
       <!-- Tab Views -->
       <div v-else>
-        <!-- Tab: Overview -->
+        <!-- Tab: Overview (流量监控 - 公开) -->
         <OverviewView
           v-if="currentTab === 'overview'"
           :state="state"
@@ -184,21 +231,21 @@ onMounted(() => {
           @refresh-stats="fetchStats"
         />
 
-        <!-- Tab: Identities & Quotas (⭐ 额度设置核心) -->
+        <!-- Tab: Identities & Quotas (仅管理员) -->
         <IdentitiesView
-          v-else-if="currentTab === 'identities'"
+          v-else-if="currentTab === 'identities' && isAdmin"
           :state="state"
           @refresh="refreshAll"
         />
 
-        <!-- Tab: VPS Nodes -->
+        <!-- Tab: VPS Nodes (仅管理员) -->
         <VpsView
-          v-else-if="currentTab === 'vps'"
+          v-else-if="currentTab === 'vps' && isAdmin"
           :state="state"
           @refresh="refreshAll"
         />
 
-        <!-- Tab: Export Verge Script -->
+        <!-- Tab: Export Verge Script (订阅导出 - 公开) -->
         <ExportView
           v-else-if="currentTab === 'export'"
           :state="state"
@@ -206,10 +253,17 @@ onMounted(() => {
       </div>
     </main>
 
-    <!-- History Query Modal -->
+    <!-- History Query Modal (Admin only) -->
     <HistoryModal
+      v-if="isAdmin"
       v-model="showHistoryModal"
       :default-period="state?.calendar?.month"
+    />
+
+    <!-- Admin Login Modal -->
+    <LoginModal
+      v-model="showLoginModal"
+      @login-success="refreshAll"
     />
   </div>
 </template>
