@@ -65,4 +65,16 @@ export interface Snapshot {
   status: "ready" | "error";
   error: string;
   users: { id: string; uplink: number; downlink: number; disabled: boolean }[];
+  daily?: {
+    date: string;
+    users: { id: string; uplink: number; downlink: number }[];
+    quality: "complete" | "partial" | "missing";
+    archived: boolean;
+  };
+  archive?: {
+    period: string;
+    type: "daily" | "month";
+    users: { id: string; uplink: number; downlink: number }[];
+    quality: "complete" | "partial" | "missing";
+  };
 }

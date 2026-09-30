@@ -69,6 +69,60 @@ export function validateSnapshot(b: Record<string, unknown>): Snapshot {
     assert(typeof a.disabled === "boolean", "Invalid disabled");
     return { id, uplink, downlink, disabled: a.disabled };
   });
+  
+  let daily: Snapshot["daily"] | undefined;
+  if (b.daily && typeof b.daily === "object") {
+    const d = b.daily as Record<string, unknown>;
+    const date = text(d.date, "date", 10);
+    assert(/^\d{4}-\d{2}-\d{2}$/.test(date), "Invalid daily date");
+    const quality = text(d.quality, "quality", 10);
+    assert(["complete", "partial", "missing"].includes(quality), "Invalid quality");
+    assert(typeof d.archived === "boolean", "Invalid archived flag");
+    assert(Array.isArray(d.users) && d.users.length <= 50, "Invalid daily users");
+    const dSeen = new Set();
+    const dUsers = d.users.map((u: unknown) => {
+      assert(u && typeof u === "object", "Invalid daily user");
+      const a = u as Record<string, unknown>;
+      const id = text(a.id, "id", 36);
+      assert(/^[a-f0-9-]{36}$/.test(id) && !dSeen.has(id), "Duplicate identity in daily");
+      dSeen.add(id);
+      const uplink = integer(a.uplink, "uplink"),
+        downlink = integer(a.downlink, "downlink");
+      assert(Number.isSafeInteger(uplink + downlink), "Daily counter overflow");
+      return { id, uplink, downlink };
+    });
+    daily = { date, quality: quality as any, archived: d.archived as boolean, users: dUsers };
+  }
+
+  let archive: Snapshot["archive"] | undefined;
+  if (b.archive && typeof b.archive === "object") {
+    const a = b.archive as Record<string, unknown>;
+    const type = text(a.type, "type", 10);
+    assert(type === "daily" || type === "month", "Invalid archive type");
+    const period = text(a.period, "period", 10);
+    if (type === "daily") {
+      assert(/^\d{4}-\d{2}-\d{2}$/.test(period), "Invalid archive daily period");
+    } else {
+      assert(/^\d{4}-\d{2}$/.test(period), "Invalid archive month period");
+    }
+    const quality = text(a.quality, "quality", 10);
+    assert(["complete", "partial", "missing"].includes(quality), "Invalid archive quality");
+    assert(Array.isArray(a.users) && a.users.length <= 50, "Invalid archive users");
+    const aSeen = new Set();
+    const aUsers = a.users.map((u: unknown) => {
+      assert(u && typeof u === "object", "Invalid archive user");
+      const au = u as Record<string, unknown>;
+      const id = text(au.id, "id", 36);
+      assert(/^[a-f0-9-]{36}$/.test(id) && !aSeen.has(id), "Duplicate identity in archive");
+      aSeen.add(id);
+      const uplink = integer(au.uplink, "uplink"),
+        downlink = integer(au.downlink, "downlink");
+      assert(Number.isSafeInteger(uplink + downlink), "Archive counter overflow");
+      return { id, uplink, downlink };
+    });
+    archive = { period, type: type as any, quality: quality as any, users: aUsers };
+  }
+
   return {
     schema: 1,
     sequence,
@@ -79,6 +133,8 @@ export function validateSnapshot(b: Record<string, unknown>): Snapshot {
     status: b.status,
     error: b.error,
     users,
+    daily,
+    archive,
   };
 }
 export async function agentRoutes(
@@ -140,6 +196,22 @@ export async function agentRoutes(
     });
   }
   const v = await deviceAuth(request, env);
+  if (path === "/api/agent/analytics/seed" && request.method === "GET") {
+    // Return the latest recorded daily state for this VPS
+    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const row = await env.DB.prepare(
+      "SELECT payload FROM usage_periods WHERE vps_id=? AND period=?"
+    ).bind(v.id, today).first<{ payload: string }>();
+    if (row && row.payload) {
+      const p = JSON.parse(row.payload) as Snapshot;
+      if (p.daily && p.daily.date === today) {
+        return json(p.daily);
+      }
+    }
+    // Return empty if not found, let agent initialize as partial
+    return new Response("Not found", { status: 404 });
+  }
+
   if (path === "/api/agent/config" && request.method === "GET")
     return json(await desired(env, v));
   if (path === "/api/agent/rotate" && request.method === "POST") {
@@ -189,15 +261,50 @@ export async function agentRoutes(
           ? "error"
           : "syncing";
     // Every following write is conditioned on the winning sequence, so concurrent old requests cannot replace a newer snapshot.
-    await env.DB.batch([
+    // Construct payloads for the periods.
+    const monthPayload = payload; // includes the full snapshot
+    const dayPayload = payload;   // includes the full snapshot and optional daily
+    
+    const queries = [
       env.DB.prepare(
-        "INSERT INTO snapshots(vps_id,sequence,month,day,payload,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(vps_id) DO UPDATE SET sequence=excluded.sequence,month=excluded.month,day=excluded.day,payload=excluded.payload,updated_at=excluded.updated_at WHERE excluded.sequence>sequence",
-      ).bind(...params),
-      ...[s.month, s.day].map((p) =>
+        "INSERT INTO snapshots(vps_id,sequence,month,day,payload,updated_at) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM vps WHERE id=? AND revoked=0 AND credential_hash=?) ON CONFLICT(vps_id) DO UPDATE SET sequence=excluded.sequence,month=excluded.month,day=excluded.day,payload=excluded.payload,updated_at=excluded.updated_at WHERE excluded.sequence>sequence",
+      ).bind(v.id, s.sequence, s.month, s.day, payload, now, v.id, v.credential_hash),
+
+      
+      env.DB.prepare(
+        "INSERT INTO usage_periods(vps_id,period,payload,updated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?) ON CONFLICT(vps_id,period) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at",
+      ).bind(v.id, s.month, monthPayload, now, v.id, s.sequence),
+      
+      env.DB.prepare(
+        "INSERT INTO usage_periods(vps_id,period,payload,updated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?) ON CONFLICT(vps_id,period) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at",
+      ).bind(v.id, s.day, dayPayload, now, v.id, s.sequence),
+    ];
+
+    if (s.archive) {
+      let archPayload: string;
+      if (s.archive.type === "daily") {
+        archPayload = JSON.stringify({
+          daily: {
+            date: s.archive.period,
+            users: s.archive.users,
+            quality: s.archive.quality,
+            archived: true,
+          }
+        });
+      } else {
+        archPayload = JSON.stringify({
+          month: s.archive.period,
+          users: s.archive.users.map(u => ({ ...u, disabled: false })), // Month archives don't strictly need disabled flag for historical
+        });
+      }
+      queries.push(
         env.DB.prepare(
           "INSERT INTO usage_periods(vps_id,period,payload,updated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?) ON CONFLICT(vps_id,period) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at",
-        ).bind(v.id, p, payload, now, v.id, s.sequence),
-      ),
+        ).bind(v.id, s.archive.period, archPayload, now, v.id, s.sequence)
+      );
+    }
+
+    queries.push(
       env.DB.prepare(
         "UPDATE vps SET last_sync=?,status=CASE WHEN ?='ready' AND revision<>? THEN 'syncing' ELSE ? END,version=?,error=? WHERE id=? AND revoked=0 AND credential_hash=? AND EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?)",
       ).bind(
@@ -211,8 +318,10 @@ export async function agentRoutes(
         v.credential_hash,
         v.id,
         s.sequence,
-      ),
-    ]);
+      )
+    );
+
+    await env.DB.batch(queries);
     return json({ accepted: true, duplicate: false });
   }
   throw new HttpError(404, "Not found");

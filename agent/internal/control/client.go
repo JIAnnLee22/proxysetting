@@ -115,6 +115,13 @@ func (c *Client) Config(ctx context.Context, revision uint64) (model.Desired, er
 func (c *Client) Snapshot(ctx context.Context, s model.Snapshot) error {
 	return c.request(ctx, http.MethodPost, "/api/agent/snapshot", s, nil)
 }
+func (c *Client) Seed(ctx context.Context) (*model.Daily, error) {
+	var out model.Daily
+	if e := c.request(ctx, http.MethodGet, "/api/agent/analytics/seed", nil, &out); e != nil {
+		return nil, e
+	}
+	return &out, nil
+}
 func (c *Client) Rotate(ctx context.Context) (string, error) {
 	var out struct {
 		Credential string `json:"credential"`

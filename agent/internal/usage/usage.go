@@ -143,13 +143,13 @@ func delta(value, old uint64, reset bool) uint64 {
 	}
 	return value - old
 }
-func (s *State) Sample(now time.Time, counters map[string]xray.Counter, reset bool, d model.Desired, version string) error {
+func (s *State) Sample(now time.Time, counters map[string]xray.Counter, reset bool, d model.Desired, version string) (map[string]xray.Counter, error) {
 	month, day := model.Calendar(now)
 	if month < s.Month {
-		return ErrClock
+		return nil, ErrClock
 	}
 	if e := s.Ensure(d); e != nil {
-		return e
+		return nil, e
 	}
 	rollover := month != s.Month
 	if rollover {
@@ -158,7 +158,7 @@ func (s *State) Sample(now time.Time, counters map[string]xray.Counter, reset bo
 		// totals, then rebase both directions. At most one sampling interval is unbilled.
 		s.Prune(now)
 		if e := s.Queue(d.Revision, version, "ready", ""); e != nil {
-			return e
+			return nil, e
 		}
 		for id, v := range s.Users {
 			v.Uplink = 0
@@ -167,6 +167,7 @@ func (s *State) Sample(now time.Time, counters map[string]xray.Counter, reset bo
 		}
 		s.Month = month
 	}
+	deltas := make(map[string]xray.Counter)
 	for id, v := range s.Users {
 		c, ok := counters[id+"@proxysetting"]
 		if !ok { // Counter temporarily absent: keep the baseline unless Xray restarted.
@@ -178,18 +179,24 @@ func (s *State) Sample(now time.Time, counters map[string]xray.Counter, reset bo
 			continue
 		}
 		if c.Up > model.MaxSafe || c.Down > model.MaxSafe {
-			return ErrState
+			return nil, ErrState
 		}
 		if !rollover {
 			up, down := delta(c.Up, v.RawUp, reset), delta(c.Down, v.RawDown, reset)
 			if up > model.MaxSafe-v.Uplink || down > model.MaxSafe-v.Downlink {
-				return ErrState
+				return nil, ErrState
 			}
 			v.Uplink += up
 			v.Downlink += down
+			deltas[id] = xray.Counter{Up: up, Down: down}
 			if v.Uplink > model.MaxSafe-v.Downlink {
-				return ErrState
+				return nil, ErrState
 			}
+		} else {
+			// On month rollover, the interval pre-midnight is unbilled.
+			// New baseline starts here. The delta for daily usage would be 0 for this exact tick,
+			// or we could forward the exact raw to daily. But keeping it 0 here is fine.
+			deltas[id] = xray.Counter{Up: 0, Down: 0}
 		}
 		v.RawUp = c.Up
 		v.RawDown = c.Down
@@ -198,7 +205,7 @@ func (s *State) Sample(now time.Time, counters map[string]xray.Counter, reset bo
 	s.Day = day
 	s.LastSample = now.UTC()
 	s.Disable(d)
-	return s.Merge(now, d)
+	return deltas, s.Merge(now, d)
 }
 func (s *State) Allowed(d model.Desired) map[string]model.User {
 	out := map[string]model.User{}

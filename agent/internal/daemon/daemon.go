@@ -27,6 +27,7 @@ var ErrHealth = errors.New("agent is not ready")
 type Control interface {
 	Config(context.Context, uint64) (model.Desired, error)
 	Snapshot(context.Context, model.Snapshot) error
+	Seed(context.Context) (*model.Daily, error)
 }
 type Upgrader interface {
 	Apply(context.Context, string, string, *model.Upgrade) error
@@ -36,6 +37,7 @@ type Daemon struct {
 	Version  string
 	Config   model.Installed
 	State    *usage.State
+	Daily    *usage.DailyState
 	API      xray.API
 	Control  Control
 	Upgrade  Upgrader
@@ -66,11 +68,18 @@ func Load(root, version string, api xray.API) (*Daemon, error) {
 	if e = s.Validate(); e != nil {
 		return nil, e
 	}
+	var daily usage.DailyState
+	if e = state.Load(filepath.Join(root, "state", "analytics.json"), &daily); e != nil {
+		daily = *usage.NewDaily(time.Now()) // Independent auth seed missing means partial
+	}
+	if e = daily.Validate(); e != nil {
+		return nil, e
+	}
 	client, e := control.New(c.ControlURL, c.Credential)
 	if e != nil {
 		return nil, e
 	}
-	d := &Daemon{Root: root, Version: version, Config: c, State: &s, API: api, Control: client, Upgrade: upgrade.New(), Save: state.Save, Notify: notify.Send, Now: time.Now, active: map[string]string{}}
+	d := &Daemon{Root: root, Version: version, Config: c, State: &s, Daily: &daily, API: api, Control: client, Upgrade: upgrade.New(), Save: state.Save, Notify: notify.Send, Now: time.Now, active: map[string]string{}}
 	d.StopXray = func(ctx context.Context) error {
 		cmd := exec.CommandContext(ctx, "systemctl", "stop", "--no-block", "proxysetting-xray.service")
 		if e := cmd.Run(); e != nil {
@@ -81,8 +90,11 @@ func Load(root, version string, api xray.API) (*Daemon, error) {
 	return d, nil
 }
 func (d *Daemon) persist() error {
-	return d.Save(filepath.Join(d.Root, "state", "usage.json"), d.State)
-}
+		if e := d.Save(filepath.Join(d.Root, "state", "usage.json"), d.State); e != nil {
+			return e
+		}
+		return d.Save(filepath.Join(d.Root, "state", "analytics.json"), d.Daily)
+	}
 func (d *Daemon) Reconcile(ctx context.Context, clear bool) error {
 	live, e := d.API.Users(ctx)
 	if e != nil {
@@ -129,8 +141,35 @@ func (d *Daemon) Sample(ctx context.Context, clear bool) error {
 	now := d.Now()
 	start := now.Unix() - int64(uptime)
 	reset := d.State.XrayStart != 0 && math.Abs(float64(start-d.State.XrayStart)) > 3
-	if e = d.State.Sample(now, counters, reset, d.Config.Desired, d.Version); e != nil {
+	oldMonth := d.State.Month
+	deltas, e := d.State.Sample(now, counters, reset, d.Config.Desired, d.Version)
+	if e != nil {
 		return e
+	}
+	d.Daily.Add(now, deltas, reset)
+	// If a month rollover occurred, the old month is finalized. We should create a month archive.
+	// usage.go already queues a pending snapshot with the old month, but that one may be pruned 
+	// by usage.State.Prune() after a month. We keep an independent month archive here.
+	if oldMonth != "" && oldMonth != d.State.Month {
+		arch := model.Archive{
+			Period:  oldMonth,
+			Type:    "month",
+			Quality: "complete", // Month totals are authoritative
+			Users:   []model.DailyUser{},
+		}
+		// The old month totals are captured in the pending snapshot that usage.Sample just queued.
+		// Let's copy the totals from that pending snapshot.
+		if len(d.State.Pending) > 0 {
+			lastPending := d.State.Pending[len(d.State.Pending)-1]
+			if lastPending.Month == oldMonth {
+				for _, u := range lastPending.Users {
+					arch.Users = append(arch.Users, model.DailyUser{ID: u.ID, Uplink: u.Uplink, Downlink: u.Downlink})
+				}
+			}
+		}
+		if len(arch.Users) > 0 {
+			d.Daily.Archives = append(d.Daily.Archives, arch)
+		}
 	}
 	d.State.XrayStart = start
 	d.State.Ready = false
@@ -210,6 +249,7 @@ func (d *Daemon) eligibleUpgrade() *model.Upgrade {
 }
 func (d *Daemon) prepareUpload() error {
 	d.State.Prune(d.Now())
+	d.Daily.Prune(d.Now())
 	// Keep each pending payload immutable until its acknowledgment is fsynced.
 	// A process crash after Worker accepted it repeats the same sequence + body.
 	if len(d.State.Pending) == 0 {
@@ -225,6 +265,14 @@ func (d *Daemon) prepareUpload() error {
 		}
 		if e := d.State.Queue(d.Config.Desired.Revision, d.Version, status, message); e != nil {
 			return e
+		}
+		// Attach Daily and Archive to the newly queued pending payload.
+		lastIdx := len(d.State.Pending) - 1
+		p := &d.State.Pending[lastIdx]
+		p.Daily = d.Daily.CurrentDaily()
+		if arch := d.Daily.PeekArchive(); arch != nil {
+			archCopy := *arch
+			p.Archive = &archCopy
 		}
 	}
 	if e := d.persist(); e != nil {
@@ -297,6 +345,25 @@ func (d *Daemon) run(ctx context.Context, sampleEvery, pollEvery, uploadEvery ti
 	}()
 	if e := d.wait(ctx); e != nil {
 		return e
+	}
+	// Attempt to recover daily state seed if it's currently partial or missing.
+	if d.Daily.Quality != "complete" {
+		c2, cancel2 := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel2()
+		if seed, err := d.Control.Seed(c2); err == nil && seed != nil && seed.Date == d.Daily.Date {
+			for _, u := range seed.Users {
+				// Re-base only if we don't have higher local numbers.
+				if v, ok := d.Daily.Users[u.ID]; !ok {
+					d.Daily.Users[u.ID] = usage.DailyEntry{Uplink: u.Uplink, Downlink: u.Downlink}
+				} else {
+					v.Uplink = max(v.Uplink, u.Uplink)
+					v.Downlink = max(v.Downlink, u.Downlink)
+					d.Daily.Users[u.ID] = v
+				}
+			}
+			d.Daily.Quality = "complete"
+			_ = d.persist()
+		}
 	}
 	if e := d.Sample(ctx, true); e != nil {
 		return e
@@ -452,6 +519,10 @@ func (d *Daemon) run(ctx context.Context, sampleEvery, pollEvery, uploadEvery ti
 			// a different sequence in its place; acknowledgments are fsynced before reuse.
 			for i, p := range d.State.Pending {
 				if p.Sequence == r.sequence {
+					// Pop the archive from Daily if it was successfully acknowledged.
+					if p.Archive != nil && d.Daily.PeekArchive() != nil && d.Daily.PeekArchive().Period == p.Archive.Period && d.Daily.PeekArchive().Type == p.Archive.Type {
+						d.Daily.PopArchive()
+					}
 					d.State.Pending = append(d.State.Pending[:i], d.State.Pending[i+1:]...)
 					break
 				}

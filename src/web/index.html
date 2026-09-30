@@ -1,86 +1,24 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Reality VPS 管理</title>
-    <link rel="stylesheet" href="/style.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proxysetting - Reality & Traffic Console</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('proxysetting_theme');
+          if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body>
-    <header>
-      <h1>Reality VPS 管理</h1>
-      <button id="refresh">刷新</button><span id="clock"></span>
-    </header>
-    <p class="warning">
-      用量每约5分钟同步；超额只禁止新连接，旧连接可能继续。导出脚本含身份密钥，禁止公开分享。
-    </p>
-    <p id="message" role="status"></p>
-    <section>
-      <h2>添加 VPS</h2>
-      <form id="vps-form">
-        <label>名称<input name="name" required maxlength="100" /></label
-        ><label>公网 IPv4/IPv6<input name="address" required /></label
-        ><label
-          >端口<input
-            name="port"
-            type="number"
-            min="1"
-            max="65535"
-            value="443"
-            required /></label
-        ><label
-          >Reality 目标<input
-            name="serverName"
-            list="targets"
-            value="www.cloudflare.com"
-            required /></label
-        ><datalist id="targets">
-          <option value="www.microsoft.com"></option>
-          <option value="www.cloudflare.com"></option>
-          <option value="www.apple.com"></option></datalist
-        ><button>添加</button>
-      </form>
-      <p>
-        安装器测试所选目标TLS1.3；失败不部署。TLS1.3通过仍需实际Reality客户端验证。443冲突可在添加时指定其他端口；未部署VPS可编辑地址/端口/目标并重新生成命令；已注册设备参数固定，修改需显式重装。
-      </p>
-      <div id="vps-list"></div>
-    </section>
-    <section>
-      <h2>身份与逐台月额度</h2>
-      <form id="identity-form">
-        <label
-          >用户/设备名称<input name="name" required maxlength="100" /></label
-        ><button>创建身份</button>
-      </form>
-      <div id="identities"></div>
-    </section>
-    <section>
-      <h2>导出 Clash Verge Rev JS</h2>
-      <label>选择身份<select id="export-identity"></select></label
-      ><button id="copy">复制脚本</button
-      ><button id="download">下载脚本</button>
-      <p>全部VPS须ready且本身份逐台额度必填。耗尽节点保留，月初自动恢复。</p>
-    </section>
-    <section>
-      <h2>月/日汇总</h2>
-      <label
-        >月份或日期<input
-          id="period"
-          placeholder="2026-09 或 2026-09-30" /></label
-      ><button id="history">查询</button>
-      <pre id="history-result"></pre>
-      <p>日记录是月累计的日末观测快照，不代表精确日账单。</p>
-    </section>
-    <dialog id="install-dialog">
-      <h2>一次性安装命令</h2>
-      <p>
-        请在指定VPS以root执行。命令15分钟有效；显示后勿分享，避免保留shell历史。先核对版本与SHA256。
-      </p>
-      <textarea id="command" rows="8" readonly></textarea>
-      <p id="expiry"></p>
-      <button id="copy-command">复制命令</button
-      ><button id="close-dialog">关闭并清除</button>
-    </dialog>
-    <script src="/app.js" defer></script>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen">
+    <div id="app"></div>
+    <script type="module" src="/main.ts"></script>
   </body>
 </html>

@@ -11,8 +11,40 @@ GET `/api/agent/config?revision=N`: returns full config (even unchanged; no 304 
 ```
 `email = identity ID + '@proxysetting'`, stable. Only explicitly granted VPS×identity pairs in users; missing quota means no user. Disabled identity/revoked grant disappears. Per VPS revisions strictly increase for grants, identity enabled/name changes, target/port changes (target/port changes require reinstall, not live mutable first release), upgrade command. Runtime must reject vpsId/port/serverName mismatch with installed config rather than mark ready. `quotaBytes` positive integer GiB × 1073741824 (max 102400 GiB). Public Reality parameters installed fixed. Upgrade URL is constructed from configured GitHub Release repo and validated release version, never user URL. Version match prevents repeated upgrade.
 
-## Snapshot
-POST `/api/agent/snapshot`: `{schema:1,sequence,month,day,revision,version,status,error,users:[{id,uplink,downlink,disabled}]}`. `sequence` monotonic persisted across restart; same/lower sequence accepted without writes (idempotent). All users have nonnegative counters for current month, including revoked/disabled historical users; up to 50. status ready/error, error scrubbed/truncated and excludes secrets. D1 stores single JSON snapshot per VPS + one JSON aggregate for each VPS×day/month. Usage entries monthly cumulative (including day rows as snapshots, NOT additive traffic). Stale month > current+1 or before previous month rejected. Cloudflare calendar authoritative validation with small month-edge tolerance; agent local clock responsible for restoring grants. Worker ready iff status ready, revision current, and Reality metadata exists. Credentials revoked: HTTP 401; agent must stop Xray on 401/403, network/5xx uses cached quotas.
+## Snapshot and Analytics
+POST `/api/agent/snapshot`: 
+```json
+{
+  "schema": 1,
+  "sequence": 123,
+  "month": "2026-09",
+  "day": "2026-09-30",
+  "revision": 5,
+  "version": "v0.1.1",
+  "status": "ready",
+  "error": "",
+  "users": [{"id": 1, "uplink": 100, "downlink": 200}],
+  "daily": {
+    "date": "2026-09-30",
+    "users": [{"id": 1, "uplink": 10, "downlink": 20}],
+    "quality": "complete",
+    "archived": false
+  },
+  "archive": {
+    "period": "2026-09-29",
+    "type": "daily",
+    "users": [{"id": 1, "uplink": 50, "downlink": 100}],
+    "quality": "complete"
+  }
+}
+```
+- `sequence` monotonic persisted across restart; same/lower sequence accepted without writes (idempotent).
+- **Month legacy `users`**: Nonnegative cumulative counters for the current month. Up to 50 users. Required for old agent compatibility and month quota enforcement.
+- **`daily` (optional)**: Daily cumulative counters (additive traffic within the day, not month cumulative). Does NOT include remote month seed or manual quota compensations. `quality` can be `complete`, `partial` (e.g. startup gap, crash), or `missing`. `archived`: boolean indicating if this is the final value for the day.
+- **`archive` (optional)**: At most one historical period (daily or monthly) to backfill. Sent over normal snapshot 5-min intervals to avoid limits.
+- **ACK & Compatibility**: The Worker acknowledges the `sequence`. The agent only deletes the confirmed `archive` from its local outbox upon HTTP 2xx response. Old agents do not send `daily`/`archive` and are gracefully handled (UI shows `missing`/legacy estimation). Old agents strict JSON decoder ignores unknown fields.
+- **Time boundaries**: Daily records retained 400 days; monthly records retained 60 months. Cloudflare calendar authoritative validation (Asia/Shanghai). Old archives beyond retention are dropped by the Worker but still ACKed to unblock the agent's queue.
+- **Usage seeds**: The remote month seed is merged for quotas (`max(local, recorded)`), but must NOT be treated as newly observed traffic in the `daily` counters. Daily counters purely represent local proxy observations since 00:00.
 
 ## Credential controls
 POST `/api/agent/rotate`: old credential authenticates; returns `{credential}`; old hash immediately invalid. Operator revoke endpoint stops subsequent authentication; already offline agent cannot learn revocation, explicitly documented. Re-enrollment resets snapshot sequence; retains quota and billing records. Desired config usage seeds current-month counters on fresh reinstall; agent merges per-direction max(local,recorded), never sum, so reinstallation cannot erase already reported monthly usage. No D1 UUID plaintext: AES-256-GCM keyed by Worker secret, AAD = VPS ID + ':' + identity ID. Device credential hash: SHA-256.

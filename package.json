@@ -4,20 +4,32 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit",
+    "build:web": "vue-tsc -p tsconfig.web.json --noEmit && vite build",
+    "dev:web": "vite",
+    "dev": "npm run build:web && wrangler dev",
+    "deploy": "npm run build:web && wrangler deploy",
+    "typecheck": "tsc --noEmit && vue-tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "db:local": "wrangler d1 migrations apply proxysetting --local",
     "db:remote": "wrangler d1 migrations apply proxysetting --remote",
-    "verify": "npm run typecheck && npm test && npm run db:local && wrangler deploy --dry-run"
+    "verify": "npm run build:web && npm run typecheck && npm test && npm run db:local && wrangler deploy --dry-run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260930.1",
+    "@lucide/vue": "^1.49.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "chart.js": "^4.5.1",
+    "clsx": "^2.1.1",
     "miniflare": "5.20260926.1-alpha",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",
+    "vite": "^8.3.1",
     "vitest": "5.0.2",
+    "vue": "^3.5.43",
+    "vue-tsc": "^3.3.11",
     "wrangler": "4.144.0"
   }
 }

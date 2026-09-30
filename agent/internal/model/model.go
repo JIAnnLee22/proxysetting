@@ -77,6 +77,23 @@ type SnapshotUser struct {
 	Downlink uint64 `json:"downlink"`
 	Disabled bool   `json:"disabled"`
 }
+type DailyUser struct {
+	ID       string `json:"id"`
+	Uplink   uint64 `json:"uplink"`
+	Downlink uint64 `json:"downlink"`
+}
+type Daily struct {
+	Date     string      `json:"date"`
+	Users    []DailyUser `json:"users"`
+	Quality  string      `json:"quality"`
+	Archived bool        `json:"archived"`
+}
+type Archive struct {
+	Period  string      `json:"period"`
+	Type    string      `json:"type"` // "daily" or "month"
+	Users   []DailyUser `json:"users"`
+	Quality string      `json:"quality"`
+}
 type Snapshot struct {
 	Schema   int            `json:"schema"`
 	Sequence uint64         `json:"sequence"`
@@ -87,6 +104,8 @@ type Snapshot struct {
 	Status   string         `json:"status"`
 	Error    string         `json:"error"`
 	Users    []SnapshotUser `json:"users"`
+	Daily    *Daily         `json:"daily,omitempty"`
+	Archive  *Archive       `json:"archive,omitempty"`
 }
 
 // Fixed UTC+8 avoids dependence on a host's zoneinfo or TZ setting.
