@@ -4,6 +4,10 @@ coverage/
 dist/
 .dev.vars
 .env
+.env.*
+*.pem
+*.key
+__pycache__/
 agent/bin/
 .tools/
 *.log

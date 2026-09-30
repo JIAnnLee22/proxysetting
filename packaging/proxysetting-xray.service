@@ -1,0 +1,24 @@
+# Managed by proxysetting; do not edit or add drop-ins.
+[Unit]
+Description=Proxysetting pinned Xray Reality server
+BindsTo=proxysetting-agent.service
+PartOf=proxysetting-agent.service
+After=network.target
+Before=proxysetting-agent.service
+
+[Service]
+Type=simple
+ExecStart=@ROOT@/current/bin/xray run -config @ROOT@/config/xray.json
+Restart=no
+TimeoutStopSec=15s
+User=root
+Group=root
+UMask=0077
+WorkingDirectory=@ROOT@
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=@ROOT@/config
+
+# Deliberately no [Install]: only the agent may start this unit.

@@ -1,0 +1,29 @@
+# Managed by proxysetting; do not edit or add drop-ins.
+[Unit]
+Description=Proxysetting quota and control agent
+Wants=network-online.target proxysetting-xray.service
+After=network-online.target proxysetting-xray.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=@ROOT@/current/bin/proxysetting-agent run --root @ROOT@
+WatchdogSec=45s
+# A SIGSTOP-stuck collector must not wait for a core dump before Xray stops.
+WatchdogSignal=SIGKILL
+TimeoutStartSec=90s
+TimeoutStopSec=30s
+Restart=on-failure
+RestartSec=5s
+User=root
+Group=root
+UMask=0077
+WorkingDirectory=@ROOT@
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=@ROOT@/config @ROOT@/state
+
+[Install]
+WantedBy=multi-user.target

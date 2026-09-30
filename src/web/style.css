@@ -1,0 +1,100 @@
+body {
+  font:
+    15px system-ui,
+    sans-serif;
+  max-width: 1150px;
+  margin: 24px auto;
+  padding: 0 18px;
+  color: #17212b;
+  background: #f8fafc;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+h1 {
+  font-size: 24px;
+}
+h2 {
+  font-size: 19px;
+}
+section {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 5px;
+}
+input,
+select,
+button,
+textarea {
+  font: inherit;
+  padding: 7px;
+  border: 1px solid #aebbc8;
+  border-radius: 5px;
+}
+button {
+  cursor: pointer;
+  background: #e8f0fe;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+th,
+td {
+  padding: 9px;
+  border: 1px solid #ddd;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.warning {
+  color: #8a3e00;
+}
+#message {
+  white-space: pre-wrap;
+  color: #8a2500;
+}
+dialog {
+  width: min(850px, 90vw);
+}
+textarea {
+  width: 95%;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+small {
+  display: block;
+  color: #536476;
+}
+.quota {
+  width: 85px;
+}
+.actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}

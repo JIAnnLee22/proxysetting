@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "proxysetting",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-29",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./src/web",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "proxysetting",
+      "database_id": "REPLACE_WITH_D1_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "REPLACE.cloudflareaccess.com",
+    "ACCESS_AUD": "REPLACE",
+    "ADMIN_EMAILS": "jiannlee22@gmail.com",
+    "RELEASE_REPO": "JIAnnLee22/proxysetting",
+    "RELEASE_VERSION": "v0.1.0",
+  },
+}
