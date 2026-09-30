@@ -20,7 +20,8 @@
 ## Cloudflare真实部署
 - 用户Wrangler OAuth账号邮箱jiannlee22@gmail.com；创建独立proxysetting D1并应用0001 migration，旧sing-box-subscription数据库未改动。
 - Worker地址：`https://proxysetting.jiannlee22.workers.dev`；固定repo JIAnnLee22/proxysetting、v0.1.1及上述安装器hash。UUID_KEY以0600私有文件另存仓库外，未提交或上传GitHub。
-- **Access尚未配置**：OAuth调用access/organizations返回403；team domain/AUD仍占位。匿名根、管理API均401；设备API无凭据401，不放宽鉴权。管理员网页目前不可登录。
+- **Access参数已部署**：用户提供团队`square-field-415b.cloudflareaccess.com`及主应用AUD，已填wrangler.jsonc并部署（Worker版本6093700f-0d42-42d8-a1c0-bc939a38a326），npm verify的24测试通过。主站、app.js和管理API匿名请求302到该团队登录页，跳转AUD匹配，JWKS200/2公钥；未代替用户完成邮箱验证码登录。
+- **设备Bypass仍待修复**：/api/agent/config匿名请求及真实credential+agent UA请求均302到登录页；默认Python UA曾403。边缘Access截获设备请求，当前云端同步受阻。SSH确认agent/Xray active、check ready，本地缓存计量仍健康。不能把全站设为Bypass；需更具体设备路径例外，并检查是否启用了覆盖整个Worker的Access策略。
 - 初始测试VPS/1GiB身份通过已认证的Cloudflare D1操作创建；VPS真实Worker单次令牌注册后使用独立credential完成配置拉取和统计上报，并非mock。配置轮询60秒、用量上报300秒，last_sync不代表用量秒级刷新。
 
 ## 用户授权Arch VPS永久安装（144.202.123.93）
@@ -38,6 +39,6 @@
 - 独立安全审查子任务没有交付可用结论，不作为审计通过。
 
 ## 仍需外部验收
-- Zero Trust Access的主站允许邮箱策略、设备路径Bypass、team/AUD、管理员网页及导出真实验收。
+- Zero Trust Access主站实际邮箱登录/允许策略验收、设备路径Bypass修复后凭据请求与同步恢复、管理员网页及导出验收；team/AUD已部署。
 - Debian/Ubuntu×amd64/arm64四种真实镜像安装；Arch真机不替代该矩阵。公开Release真实升级/失败回滚仍需下一可用版本。
 - Verge Rev桌面人工导入；自然月边界长时运行。受控跨月测试未更改VPS系统时钟。

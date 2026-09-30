@@ -41,9 +41,9 @@
 
 ## 用户追加：GitHub发布与Arch测试机部署
 - 发布仓库明确为 `git@github.com:JIAnnLee22/proxysetting.git`，公开仓库；保留首个tag `v0.1.0`（CI旧ShellCheck兼容性失败，未发布资产），修复版本为 `v0.1.1`，不重写旧tag；GitHub Actions生成安装器/双架构包/SHA256SUMS，并允许固定tag的人工dispatch发布。不包含私钥、凭据、本地测试数据或构建缓存。
-- 管理员邮箱明确为 `jiannlee22@gmail.com`。用户已完成Wrangler OAuth登录；新建独立proxysetting D1并应用migration，Worker真实部署至 `https://proxysetting.jiannlee22.workers.dev`。旧sing-box-subscription数据库未改动。UUID_KEY随机生成，另备份至仓库外的用户私有配置目录（0700目录/0600文件），未随Git或发布包上传。OAuth没有Access管理权限（403）；team/aud及边缘Access路径策略仍需配置，当前页面/管理API匿名访问401，不放宽鉴权。
+- 管理员邮箱明确为 `jiannlee22@gmail.com`。用户已完成Wrangler OAuth登录；新建独立proxysetting D1并应用migration，Worker真实部署至 `https://proxysetting.jiannlee22.workers.dev`。旧sing-box-subscription数据库未改动。UUID_KEY随机生成，另备份至仓库外的用户私有配置目录（0700目录/0600文件），未随Git或发布包上传。OAuth没有Access管理权限（403）；用户已提供真实team/AUD，已规范域名并部署Worker参数。主站/静态资源/管理API匿名请求302至该团队登录页，AUD匹配，JWKS200；实际邮箱登录仍待用户验证。设备路径也302（默认Python UA曾403，按agent UA探测为302），表明Bypass未生效；VPS当前active/ready、本地额度继续，云端同步受阻，需用户补路径例外，不放宽管理鉴权。
 - 用户明确要求在已授权Arch测试机上停用sing-box并安装本项目，不要求生产式迁移。原Debian/Ubuntu限制扩展为Debian/Ubuntu/Arch Linux（amd64/arm64）；安装器与回归测试同步更新，已有的Xray版本锁定和服务归属/端口保护不变。
 - sing-box已停止、取消开机启动并mask，备份保留。v0.1.1公开CI、双架构发布与SHA256验收通过；Arch上通过真实Worker单次令牌注册并安装，agent/Xray active，agent enabled，Xray仅开放TCP443和回环10085，秘密/计量文件0600，防火墙未改。
 - 真实目标兼容性差异：该VPS的www.microsoft.com通过TLS1.3探测但Reality握手失败；隔离比较确认www.cloudflare.com成功。保留旧安装并显式重装更换目标，不在Web放宽已注册参数修改。公网Chrome/VLESS/Reality+vision请求ipify返回144.202.123.93。
-- 通过真实D1改测试身份额度：64byte时上报uplink1918/downlink4631/disabled=true且新连接失败；恢复1GiB后新连接成功、云快照disabled=false。配置轮询60秒/上报300秒，测试不假设快照每分钟刷新。管理员网页仍待Access，真实设备注册/统计/配置链路已可用。
+- 通过真实D1改测试身份额度：64byte时上报uplink1918/downlink4631/disabled=true且新连接失败；恢复1GiB后新连接成功、云快照disabled=false。配置轮询60秒/上报300秒，测试不假设快照每分钟刷新。该轮真实设备注册/统计/配置链路已验证可用；随后用户启用Access，管理入口已转登录页，但设备路径也被保护，当前同步暂受阻，等待修复Bypass。
 - 手动systemctl restart agent首次出现关停Xray任务抢占启动、30秒本地API超时后5秒自动恢复；已记录局限，操作文档改用stop两服务再start agent；升级器原本使用有序stop/start。独立安全审查无可用结论，不作为安全审计通过。详细结果见docs/verification.md。
