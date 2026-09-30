@@ -3,7 +3,7 @@
 
 ## 安装
 1. 先人工安装必要工具：Debian/Ubuntu上 `apt-get update && apt-get install -y curl tar unzip iproute2 util-linux coreutils`。Arch Linux使用 `pacman -Syu --needed curl tar unzip iproute2 util-linux coreutils ca-certificates`。安装器不自动改包管理器/防火墙。
-2. Web添加名称、公网IPv4/IPv6（首版仅字面IP，不接受DNS或私网地址）、端口和Reality候选目标。候选如www.microsoft.com/www.cloudflare.com/www.apple.com；安装时TLS1.3不通则失败，不部署。目标可逐台选；不要求目标属于自己。
+2. Web添加名称、公网IPv4/IPv6（首版仅字面IP，不接受DNS或私网地址）、端口和Reality候选目标。候选如www.cloudflare.com/www.microsoft.com/www.apple.com；安装时TLS1.3不通则失败，不部署。TLS1.3仅是必要条件，不保证Reality握手兼容：本次Arch VPS上www.microsoft.com通过TLS探测但Reality失败，www.cloudflare.com通过实际公网客户端验证。目标须逐台实测，不要求属于自己。
 3. 443冲突或目标TLS测试失败时，在Web“修改未部署参数”选择其他端口/目标；这会使旧令牌失效，需重新生成命令。已注册设备不能在线改地址/端口/目标，须显式重装。Web生成一次性命令，确认GitHub仓库/tag/脚本SHA256。root在**对应VPS**执行，15分钟有效一次消费；命令先下载校验脚本再运行，不直接curl|bash。token会出现在一次性命令里，关闭shell历史，勿贴入日志/聊天。
 4. 安装器完成权限/系统/架构/端口检查，下载校验双组件，agent生成本地Reality私钥、公钥/shortId、Xray配置，测试后注册，原子切换current并启动独立服务。仅公有Reality参数上传Worker。
 5. 手动检查主机防火墙和云安全组，放行Reality所选TCP端口（默认443），**不要开放10085**。安装器不关闭防火墙，也不能代替云控制台放行。
@@ -16,7 +16,7 @@ systemctl status proxysetting-agent.service proxysetting-xray.service
 /opt/proxysetting/current/bin/proxysetting-agent check --root /opt/proxysetting
 journalctl -u proxysetting-agent.service -u proxysetting-xray.service
 ```
-Xray BindsTo/PartOf agent，仅由agent的Wants关系启动；agent需恢复允许用户并持久化才发READY，每成功采样发watchdog。Xray clients静态为空，启动不绕过本月停用状态。正常停止顺序agent先，最终采样后Xray停。
+Xray BindsTo/PartOf agent，仅由agent的Wants关系启动；agent需恢复允许用户并持久化才发READY，每成功采样发watchdog。Xray clients静态为空，启动不绕过本月停用状态。正常停止顺序agent先，最终采样后Xray停。配置轮询每60秒、云端用量上报每300秒，页面快照并非秒级实时。手动重启采用 `systemctl stop proxysetting-agent proxysetting-xray && systemctl start proxysetting-agent`；直接restart agent存在关停任务与启动任务抢占，可能先超时再自动恢复。
 
 ## 升级和回滚
 Web“升级版本”输入固定 `vMAJOR.MINOR.PATCH`，Worker只读取已配置GitHub仓库该tag的SHA256SUMS，下发经hash验证的安装脚本；agent独立systemd-run执行，升级器读取本地root/config/release.env仓库，不接受任意URL。不得使用latest。升级前agent最终采样，保存并备份状态/配置；原子切换、Xray配置检查及agent readiness失败则回滚旧版本，**绝不把旧备份覆盖新的usage/sequence**。

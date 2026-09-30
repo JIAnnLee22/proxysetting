@@ -1,26 +1,43 @@
-# 实施验证记录
-## 已通过
-- Node 24：`npm run verify`（TypeScript、Vitest、真实本地D1 migration、Worker assets/API dry-run），24测试通过；`npm audit`零已知漏洞。
-- Go 1.26.7：单测、`go vet ./...`、`go test -race ./...`；Linux amd64/arm64 `CGO_ENABLED=0 go build`，发布ldflags版本v0.1.0可核对。
-- `python3 scripts/test-install.py`：29模拟测试（固定新版本初装/编译版本不符拒绝、两架构/Debian、Ubuntu、Arch入口、二次执行、非空root、端口、注册失败、hash错误、archive成员、服务归属、升级回滚和状态不可回退）；`shellcheck scripts/*.sh`、Bash语法通过。
-- SHA256校验官方Xray v26.3.27 amd64产物后真实集成：TLS1.3本地伪装目标+Reality客户端→TCP echo→用户上下行计量→持久化后RemoveUser→新连接失败、旧连接继续计量→北京时间次月AddUser恢复→控制面离线缓存额度→意外Xray停止检测。复现：`XRAY_BIN=/path/to/verified/xray CGO_ENABLED=0 go test ./internal/daemon -run TestRealXrayRuntime -v -count=1`。不依赖公网代理目标，不修改宿主systemd。
-- 官方Mihomo v1.19.31 amd64产物SHA256校验后 `mihomo -t` 验证VLESS/Reality配置及ownership扩展字段；Verge脚本VM fixtures覆盖嵌套select、空配置、重复执行、同名冲突/恶意名称。
+# 实施与部署验证记录
+## 本地及CI通过
+- Node 24：`npm run verify`，TypeScript、24个Vitest测试、本地D1 migration、Worker assets/API dry-run通过；此前`npm audit`零已知漏洞。
+- Go 1.26+：单测、`go vet ./...`、`go test -race ./...`；amd64/arm64无CGO构建。一次本机未提供GCC的默认CGO测试失败，改用`CGO_ENABLED=0 go test ./...`通过；GitHub Ubuntu CI的race/vet通过。
+- `python3 scripts/test-install.py`：29模拟测试，覆盖Debian/Ubuntu/Arch、双架构、固定新版本初装、二进制版本不符拒绝、端口/权限、注册/hash/归属失败、升级回滚和计量状态不可回退。ShellCheck和Bash语法通过。
+- 官方Xray v26.3.27哈希校验后真实Reality集成：双向计量、超额移除用户、新连接失败、旧连接继续计量、北京时间受控跨月恢复、离线限额及Xray停止检测。复现：`XRAY_BIN=/path/to/verified/xray CGO_ENABLED=0 go test ./internal/daemon -run TestRealXrayRuntime -v -count=1`。
+- 官方Mihomo v1.19.31哈希校验和`mihomo -t`通过；Verge脚本VM覆盖幂等/同名冲突/嵌套select等。未替代桌面人工导入。
 
-## 用户授权真实VPS（144.202.123.93）
-机器实际为Arch Linux amd64，已有sing-box监听TCP/UDP443，UFW活动、仅放行22/443。不满足计划的Debian/Ubuntu首装支持；未覆盖sing-box、未改防火墙、未正式安装本项目。
-隔离目录+未启用的临时systemd服务+随机高端口+本机HTTPS mock control；测试CA只通过临时service Environment传入，未修改系统信任仓库。通过：
-- 生产安装器拒绝Arch且不创建安装根；agent拒绝占用的443且未消费注册token。
-- 实际www.microsoft.com TLS1.3探测、一次注册、READY通知、当前月已耗尽quota持久化。
-- agent SIGKILL→Xray BindsTo停止→自动重启后耗尽用户仍禁用。
-- Xray SIGKILL→API持续失败检测→联动恢复且没有放行耗尽身份。
-- 控制面503跨越真实60秒轮询，采样继续、缓存额度不变。
-- agent SIGSTOP→45秒watchdog SIGKILL→Xray停止→恢复仍限额。
-- 正常停止最终采样，关闭顺序无死锁，10秒内完成。
-- 在同一VPS运行CGO禁用的真实Reality集成测试二进制：本机TLS1.3伪装/echo、双向用量、超额新连接失败/旧连接继续、受控北京时间跨月恢复全部通过（TestRealXrayRuntime，1.35秒）。
-测试结束移除临时服务/目录；核对原443监听进程和UFW输出完全未变。可复现辅助脚本 `scripts/test-systemd-vps.py` 必须仅在明确授权的隔离/测试host上以root运行，默认拒绝既有proxysetting服务/root；它不是生产安装器，也不证明Cloudflare部署成功。
+## 公开Release
+- 首个v0.1.0 tag保留，旧版CI ShellCheck报告SC2015，未发布资产；修复后不改写旧tag。
+- [v0.1.1](https://github.com/JIAnnLee22/proxysetting/releases/tag/v0.1.1)，提交`a980ff4d05888256cf19e2eebf9a7199fe91bd5e`；[CI 36671481874](https://github.com/JIAnnLee22/proxysetting/actions/runs/36671481874)的verify、双架构build、release均success。
+- 下载公开资产后校验SHA256、归档恰好含agent和两unit、ELF64架构62/183；amd64实际执行`--version`为v0.1.1；install.sh与审核源码逐字节一致。没有密钥、运行配置或状态。
+
+| 资产 | SHA256 |
+|---|---|
+| install.sh | `c97287cc5c99f0305c8a78179fb370decc20d962281fdfdf063f167f326b089b` |
+| proxysetting-agent-linux-amd64.tar.gz | `071b0c0c6d71369cf3cea7a29aba260c22acc05967b5c17483c58f08c884a573` |
+| proxysetting-agent-linux-arm64.tar.gz | `400366b0cd7b3e0f81d34820771ccb2a6f136fd58ec80ad8f6b106ff16059c45` |
+
+## Cloudflare真实部署
+- 用户Wrangler OAuth账号邮箱jiannlee22@gmail.com；创建独立proxysetting D1并应用0001 migration，旧sing-box-subscription数据库未改动。
+- Worker地址：`https://proxysetting.jiannlee22.workers.dev`；固定repo JIAnnLee22/proxysetting、v0.1.1及上述安装器hash。UUID_KEY以0600私有文件另存仓库外，未提交或上传GitHub。
+- **Access尚未配置**：OAuth调用access/organizations返回403；team domain/AUD仍占位。匿名根、管理API均401；设备API无凭据401，不放宽鉴权。管理员网页目前不可登录。
+- 初始测试VPS/1GiB身份通过已认证的Cloudflare D1操作创建；VPS真实Worker单次令牌注册后使用独立credential完成配置拉取和统计上报，并非mock。配置轮询60秒、用量上报300秒，last_sync不代表用量秒级刷新。
+
+## 用户授权Arch VPS永久安装（144.202.123.93）
+- sing-box停止/disable/mask，备份`/root/proxysetting-singbox-backup.2heDmH`。公开Release安装器先验证固定hash，再安装并注册；agent和Xray active，agent enabled，`check`返回ready。
+- Xray占用TCP443，gRPC仅127.0.0.1:10085；config/agent.json、config/xray.json、state/usage.json均0600。UFW/云安全组未修改。
+- www.microsoft.com通过TLS1.3探测，但本机和公网Reality客户端均握手失败；隔离比较www.cloudflare.com成功。旧配置恢复关闭debug后保存至root私有备份，显式重装更换SNI，保留同一云端身份及累计用量。
+- Chrome指纹的真实公网VLESS/Reality+vision客户端经TCP443请求ipify，返回144.202.123.93。
+- 通过真实D1将测试身份额度降至64byte：云快照uplink1918/downlink4631/disabled=true，新连接失败；恢复1GiB后公网连接成功，云快照revision4/disabled=false。最终额度1GiB，不遗留64byte测试限额。
+- 临时客户端、目标比较进程/目录已清理；仅正式服务和私有备份保留。
+
+## 早期隔离测试与已知局限
+- Arch支持/永久迁移之前，隔离目录、未启用临时systemd服务和本机HTTPS mock验证READY、SIGKILL/BindsTo、Xray故障恢复、65秒控制面离线、45秒watchdog、最终采样及无死锁停止；当时保持sing-box/防火墙不变。另在该VPS通过受控跨月真实Reality集成。不能据此声称当时已有真实云部署。
+- 手动`systemctl restart proxysetting-agent`出现关停Xray任务抢占启动，首轮30秒本地API超时，5秒自动重试后恢复；保持fail-closed但有可用性间隙。手动维护使用`systemctl stop proxysetting-agent proxysetting-xray && systemctl start proxysetting-agent`，升级器使用有序stop/start。
+- TLS1.3探测和READY只证明必要条件/本地计量健康，不等于公网Reality验证；目标须逐台实测。
+- 独立安全审查子任务没有交付可用结论，不作为审计通过。
 
 ## 仍需外部验收
-- Cloudflare真实D1 migration和Worker已部署；匿名页面/管理API和无凭据设备API均401。Access team/aud及workers.dev路径策略仍需完成（OAuth管理Access返回403）；GitHub公开Release首次安装及升级链路仍待验证。
-- Debian/Ubuntu×amd64/arm64四种真实镜像/VM生产安装（当前仅cross-build/模拟入口验证，真实提供的机器是Arch）。
-- Verge Rev桌面人工导入以及实际公网端口/云安全组可达性。
-- 真实自然月长时运行边界；本地跨月验证使用受控时钟，不更改VPS系统时钟。
+- Zero Trust Access的主站允许邮箱策略、设备路径Bypass、team/AUD、管理员网页及导出真实验收。
+- Debian/Ubuntu×amd64/arm64四种真实镜像安装；Arch真机不替代该矩阵。公开Release真实升级/失败回滚仍需下一可用版本。
+- Verge Rev桌面人工导入；自然月边界长时运行。受控跨月测试未更改VPS系统时钟。

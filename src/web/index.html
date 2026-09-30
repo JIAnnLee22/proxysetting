@@ -32,7 +32,7 @@
           >Reality 目标<input
             name="serverName"
             list="targets"
-            value="www.microsoft.com"
+            value="www.cloudflare.com"
             required /></label
         ><datalist id="targets">
           <option value="www.microsoft.com"></option>
@@ -41,7 +41,7 @@
         ><button>添加</button>
       </form>
       <p>
-        安装器测试所选目标TLS1.3；失败不部署。443冲突可在添加时指定其他端口；未部署VPS可编辑地址/端口/目标并重新生成命令；已注册设备参数固定，修改需显式重装。
+        安装器测试所选目标TLS1.3；失败不部署。TLS1.3通过仍需实际Reality客户端验证。443冲突可在添加时指定其他端口；未部署VPS可编辑地址/端口/目标并重新生成命令；已注册设备参数固定，修改需显式重装。
       </p>
       <div id="vps-list"></div>
     </section>

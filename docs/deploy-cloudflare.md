@@ -18,9 +18,9 @@ npm run deploy
 UUID_KEY：生成32随机字节Base64（如 `openssl rand -base64 32`），保存到密码管理器/离线备份。**丢失会导致既有UUID无法解密；不能直接替换此secret，密钥轮换需专用重加密迁移（首版不提供）**。INSTALL_SHA256是64小写hex，用于首次安装脚本固定。`.dev.vars`可用于本地测试但不能提交。`npm run verify`不要求云账号，验证本地D1和构建。
 
 ## Access（保护workers.dev，不需要VPS域名）
-Cloudflare Zero Trust创建self-hosted Access application，绑定Worker的workers.dev地址。Access允许策略为明确管理员邮箱，不使用Everyone。配置ACCESS_TEAM_DOMAIN=`your-team.cloudflareaccess.com`（无scheme）、ACCESS_AUD=应用aud、ADMIN_EMAILS=逗号分隔准确邮箱。Worker验证签名、iss/aud/exp/iat/email，而不是信任邮箱请求头。
+Wrangler OAuth登录可发布Worker/D1，但通常不包含Access管理权限（本次调用organizations返回403）；需要在仪表盘配置Access，或额外提供仅对应账户的Access API权限。Cloudflare Zero Trust创建self-hosted Access application，绑定Worker的workers.dev地址。Access允许策略为明确管理员邮箱，不使用Everyone。配置ACCESS_TEAM_DOMAIN=`your-team.cloudflareaccess.com`（无scheme）、ACCESS_AUD=应用aud、ADMIN_EMAILS=逗号分隔准确邮箱。Worker验证签名、iss/aud/exp/iat/email，而不是信任邮箱请求头。
 - Access保护 `/`、静态资源和 `/api/admin/*`。
-- 为 `/api/agent/*` 设置路径级独立应用/策略 **Bypass**（更具体路径优先）；设备需要直接HTTPS访问。不要把admin或全站都Bypass。
+- 为 `/api/agent/*` 设置路径级独立应用/策略 **Bypass**（更具体路径优先）；设备需要直接HTTPS访问。不要把admin或全站都Bypass；先准备设备路径Bypass再开启全站保护，避免已部署agent被登录页面拦截。
 - 安装文件来自固定GitHub Release，不需要Worker公开安装目录。
 - **仅在有Access覆盖且验证正常时上线**。绕过Access的管理请求仍被Worker拒绝401，agent使用独立高熵token。
 部署后检查：无Access直接访问根/app.js/admin/state应401或Access登录页；设备无凭据应401（不能是Access HTML登录页）；管理员管理写请求必须同源JSON。首次未配置Secret/Release时清晰503，不能绕过。
