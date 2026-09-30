@@ -1,49 +1,5 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { assert, hash, HttpError, rateLimit } from "./core";
 import type { Env, VPS } from "./types";
-const resolvers = new Map<string, JWTVerifyGetKey>();
-export async function verifyAccess(
-  token: string,
-  env: Env,
-  resolver?: JWTVerifyGetKey,
-) {
-  assert(
-    /^[a-z0-9-]+\.cloudflareaccess\.com$/.test(env.ACCESS_TEAM_DOMAIN) &&
-      env.ACCESS_AUD &&
-      !env.ACCESS_AUD.startsWith("REPLACE"),
-    "Access not configured",
-    503,
-  );
-  const issuer = `https://${env.ACCESS_TEAM_DOMAIN}`;
-  if (!resolver) {
-    resolver = resolvers.get(issuer);
-    if (!resolver) {
-      resolver = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
-      resolvers.set(issuer, resolver);
-    }
-  }
-  try {
-    const { payload } = await jwtVerify(token, resolver, {
-      issuer,
-      audience: env.ACCESS_AUD,
-      algorithms: ["RS256"],
-      requiredClaims: ["exp", "iat", "email"],
-    });
-    const email =
-      typeof payload.email === "string" ? payload.email.toLowerCase() : "";
-    assert(
-      env.ADMIN_EMAILS.split(",")
-        .map((x) => x.trim().toLowerCase())
-        .includes(email),
-      "Administrator not permitted",
-      403,
-    );
-    return email;
-  } catch (e) {
-    if (e instanceof HttpError) throw e;
-    throw new HttpError(401, "Invalid Access identity");
-  }
-}
 export function mutationGuard(request: Request) {
   if (!["GET", "HEAD"].includes(request.method)) {
     const origin = request.headers.get("Origin");
@@ -60,9 +16,39 @@ export function mutationGuard(request: Request) {
   }
 }
 export async function adminAuth(request: Request, env: Env) {
-  const token = request.headers.get("Cf-Access-Jwt-Assertion");
-  assert(token, "Access login required", 401);
-  await verifyAccess(token, env);
+  assert(new URL(request.url).protocol === "https:", "HTTPS required", 403);
+  assert(
+    typeof env.ADMIN_PASSWORD === "string" &&
+      env.ADMIN_PASSWORD.length >= 16 &&
+      env.ADMIN_PASSWORD.length <= 256 &&
+      !/[\x00-\x1f\x7f]/.test(env.ADMIN_PASSWORD),
+    "ADMIN_PASSWORD secret must contain 16–256 characters without control characters",
+    503,
+  );
+  const authorization = request.headers.get("Authorization") || "";
+  const match = /^Basic ([A-Za-z0-9+/]+={0,2})$/i.exec(authorization);
+  assert(
+    match && authorization.length <= 2048,
+    "Administrator login required",
+    401,
+  );
+  let credentials: string;
+  try {
+    credentials = new TextDecoder("utf-8", { fatal: true }).decode(
+      Uint8Array.from(atob(match[1]), (c) => c.charCodeAt(0)),
+    );
+  } catch {
+    throw new HttpError(401, "Invalid administrator credentials");
+  }
+  // Compare fixed-length hashes without early exits, including the username.
+  const [actual, expected] = await Promise.all([
+    hash(credentials),
+    hash(`admin:${env.ADMIN_PASSWORD}`),
+  ]);
+  let difference = 0;
+  for (let i = 0; i < expected.length; i++)
+    difference |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
+  assert(difference === 0, "Invalid administrator credentials", 401);
   mutationGuard(request);
 }
 export async function deviceAuth(request: Request, env: Env) {

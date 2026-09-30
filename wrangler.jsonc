@@ -19,9 +19,6 @@
     },
   ],
   "vars": {
-    "ACCESS_TEAM_DOMAIN": "square-field-415b.cloudflareaccess.com",
-    "ACCESS_AUD": "798ae6ad6fba9e2e6ec26668d3f0f0b74d8cdf333cc59712db0e498d47e4d9cd",
-    "ADMIN_EMAILS": "jiannlee22@gmail.com",
     "RELEASE_REPO": "JIAnnLee22/proxysetting",
     "RELEASE_VERSION": "v0.1.1",
   },

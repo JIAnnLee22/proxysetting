@@ -1,6 +1,7 @@
 import { beforeAll, afterAll, it, expect } from "vitest";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { readFileSync } from "node:fs";
+import worker from "../src/worker/index";
 import { adminRoutes } from "../src/worker/routes/admin";
 import { agentRoutes, validateSnapshot } from "../src/worker/routes/agent";
 import { hash, token, calendar } from "../src/worker/core";
@@ -34,6 +35,7 @@ beforeAll(async () => {
   );
   env = {
     DB,
+    ADMIN_PASSWORD: "test-administrator-password",
     UUID_KEY: btoa("y".repeat(32)),
     RELEASE_REPO: "example/proxysetting",
     RELEASE_VERSION: "v0.1.0",
@@ -180,6 +182,12 @@ it("single-use enrollment rejects expired, replay, mismatched VPS", async () => 
   ).rejects.toThrow("expired");
 });
 it("serves only the authenticated device grants, stores no plaintext UUID", async () => {
+  const response = await worker.fetch(req("agent/config"), {
+    ...env,
+    ADMIN_PASSWORD: "",
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.has("WWW-Authenticate")).toBe(false);
   const d = (await (await agentRoutes(req("agent/config"), env)).json()) as any;
   expect(d.vpsId).toBe(vpsId);
   expect(d.users[0].quotaBytes).toBe(10 * 1073741824);
@@ -250,4 +258,28 @@ it("rotation invalidates old credential and revocation rejects current device", 
   await expect(agentRoutes(req("agent/config"), env)).rejects.toThrow(
     "rejected",
   );
+});
+it("serves the admin API and same-origin writes with only the administrator password", async () => {
+  const headers = {
+    Authorization: `Basic ${btoa(`admin:${env.ADMIN_PASSWORD}`)}`,
+    Origin: "https://app.example",
+    "Content-Type": "application/json",
+  };
+  const response = await worker.fetch(
+    new Request("https://app.example/api/admin/state", { headers }),
+    env,
+  );
+  expect(response.status).toBe(200);
+  const state = (await response.json()) as any;
+  expect(state.vps[0].id).toBe(vpsId);
+  expect(response.headers.has("WWW-Authenticate")).toBe(false);
+  const created = await worker.fetch(
+    new Request("https://app.example/api/admin/identities", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "password-admin-test" }),
+    }),
+    env,
+  );
+  expect(created.status).toBe(201);
 });

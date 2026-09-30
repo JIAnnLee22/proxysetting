@@ -17,7 +17,7 @@
 | proxysetting-agent-linux-amd64.tar.gz | `071b0c0c6d71369cf3cea7a29aba260c22acc05967b5c17483c58f08c884a573` |
 | proxysetting-agent-linux-arm64.tar.gz | `400366b0cd7b3e0f81d34820771ccb2a6f136fd58ec80ad8f6b106ff16059c45` |
 
-## Cloudflare真实部署
+## Cloudflare真实部署（此前Access版本记录）
 - 用户Wrangler OAuth账号邮箱jiannlee22@gmail.com；创建独立proxysetting D1并应用0001 migration，旧sing-box-subscription数据库未改动。
 - Worker地址：`https://proxysetting.jiannlee22.workers.dev`；固定repo JIAnnLee22/proxysetting、v0.1.1及上述安装器hash。UUID_KEY以0600私有文件另存仓库外，未提交或上传GitHub。
 - **Access参数已部署**：用户提供团队`square-field-415b.cloudflareaccess.com`及主应用AUD，已填wrangler.jsonc并部署（Worker版本6093700f-0d42-42d8-a1c0-bc939a38a326），npm verify的24测试通过。主站、app.js和管理API匿名请求302到该团队登录页，跳转AUD匹配，JWKS200/2公钥；未代替用户完成邮箱验证码登录。
@@ -38,7 +38,17 @@
 - TLS1.3探测和READY只证明必要条件/本地计量健康，不等于公网Reality验证；目标须逐台实测。
 - 独立安全审查子任务没有交付可用结论，不作为审计通过。
 
+## Access移除与密码登录
+- 当前代码已移除Access JWT/JWKS及team/AUD/邮箱配置，管理端改为HTTP Basic（用户名admin、ADMIN_PASSWORD secret）；静态资源/管理API仍受保护，设备仍使用原有bearer凭据。
+- `npm run verify`通过：30个Vitest测试、TypeScript、本地D1 migration检查及Worker dry-run（30.45KiB / gzip 8.97KiB）；`git diff --check`通过。覆盖错误/缺失密码、HTTP拒绝、Basic挑战、旧Access头无效、同源JSON写入和设备认证隔离。
+- 已生成32字符随机ADMIN_PASSWORD并上传Worker secret，密码另存仓库外0600私有文件；未改UUID_KEY/D1数据/设备凭据。新版发布到 `https://proxysetting.jiannlee22.workers.dev`，版本 `089270ed-cdb0-4822-a691-cc1e33e5bd52`，旧Access变量已移除。
+- 迁移排查期间，Wrangler OAuth具备Worker/D1写权限但未授权Access；发布后匿名根路径、带正确管理员密码的 `/api/admin/state` 和匿名 `/api/agent/config` 曾实测302到旧Access登录页。Access组织接口返回403，应用列表返回200/0条，不能只凭空应用列表判定保护已解除；当时带随机查询参数的请求仍被拦截。
+- Wrangler 4.144.0的 `login --scopes-list` 未提供Access scope；补充 `access:read/access:write` 的设备登录被CLI拒绝（退出1），未更换原OAuth凭据。不要继续尝试靠Wrangler OAuth追加Access权限。
+- 用户选择控制台关闭方式后，该Worker已实测不再被Access拦截，workers.dev域名保留；本机未取得额外Access权限，未操作其他Worker或Access应用。
+- 线上密码验收：根页面/app.js匿名401并带Basic挑战、正确密码200；管理state正确密码200、错误密码401。匿名设备config返回JSON 401且无登录挑战/Access重定向；跨域JSON写入非存在管理路径返回403（无数据修改）。
+- SSH只读确认Arch VPS的agent/Xray均active，正式二进制 `check --root /opt/proxysetting` 返回ready；本地已应用revision6、3个授权用户，pending快照为0。随后云端收到sequence12/revision6/ready快照，last_sync为 `2026-09-30T07:56:29.987Z`，无error，证明有效设备凭据的配置拉取和统计上报已恢复。未重启服务、轮换设备凭据或删除计量状态。
+
 ## 仍需外部验收
-- Zero Trust Access主站实际邮箱登录/允许策略验收、设备路径Bypass修复后凭据请求与同步恢复、管理员网页及导出验收；team/AUD已部署。
+- 实际浏览器内管理操作/敏感导出仍需人工验收；线上HTTP密码鉴权和有效设备凭据同步已验收通过，不再需要邮箱登录/设备路径Bypass配置。
 - Debian/Ubuntu×amd64/arm64四种真实镜像安装；Arch真机不替代该矩阵。公开Release真实升级/失败回滚仍需下一可用版本。
 - Verge Rev桌面人工导入；自然月边界长时运行。受控跨月测试未更改VPS系统时钟。

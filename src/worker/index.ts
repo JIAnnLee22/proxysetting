@@ -28,6 +28,14 @@ export default {
         },
         e instanceof HttpError ? e.status : 500,
       );
+      if (
+        response.status === 401 &&
+        !new URL(request.url).pathname.startsWith("/api/agent/")
+      )
+        response.headers.set(
+          "WWW-Authenticate",
+          'Basic realm="Proxysetting", charset="UTF-8"',
+        );
     }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store");

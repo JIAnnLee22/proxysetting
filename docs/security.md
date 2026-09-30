@@ -3,7 +3,7 @@
 保护管理端、用户UUID、Reality私钥、安装与设备凭据；不防被root控制的VPS故意伪造统计或泄露配置。第三方GitHub/Cloudflare账户安全是信任根。首次安装SHA256应来自管理员审核的固定发布。以后升级仅取配置固定仓库/tag和SHA256SUMS，依赖HTTPS及该仓库发布权限，不是独立签名/离线供应链验证。
 
 ## 身份与秘密
-- Access JWT经JWKS验签、iss/aud/过期和邮箱allowlist；不能只信任Cf-Access-Authenticated-User-Email。
+- 管理端HTTP Basic用户名固定 `admin`，ADMIN_PASSWORD仅存Worker secret，必须16–256字符且不含控制字符；使用随机生成密码，不使用人类弱口令。凭据SHA256后固定长度对比；缺失/无效配置503拒绝放行，错误凭据401，不信任旧Access请求头。全程HTTPS；Basic不是加密，禁止明文HTTP。
 - 管理写同源Origin+application/json，静态/管理API均经Worker鉴权；所有响应no-store/CSP，不开CORS。
 - UUID AES-256-GCM+VPS/身份AAD，Worker secret保管，D1仅密文。Reality私钥不上传。
 - 注册令牌随机256bit、15分钟、哈希存储、一次性CAS绑定目标地址/端口/SNI；设备token随机256bit独立、仅hash，支持rotate/revoke。
@@ -18,7 +18,9 @@ Xray静态clients为空，启动必须等agent用持久化额度恢复用户；�
 ## 网络与运维
 不暴露10085 gRPC API、不允许浏览器直连HTTP VPS。公网仅VLESS端口；防火墙和云安全组需要管理员放行，不关闭全局防火墙。需启用可信时间同步/NTP（证书和北京时间月额度依赖正确时钟）；Reality目标需TLS1.3可达，所选网站/本地法规与服务条款由部署者自行确认。目标测试失败不部署；无域名可用VPS公网IP。
 
+管理员密码验证没有内置尝试次数限制/MFA，需使用高熵随机密码，并按需设置Cloudflare防护/速率规则；不再具备Access的邮箱身份与策略管理。浏览器会缓存Basic凭据且无内置注销，共享设备使用隐私会话并完全关闭；轮换ADMIN_PASSWORD可撤销旧密码，不影响设备凭据。
+
 注册限流每IP10次/15分钟，设备30次/分钟，body64KiB。应用级D1限流不是DDoS防护，攻击流量本身消耗Worker和D1额度；对公网agent路径配置可用的Cloudflare防护/速率规则、监控并清理旧IP限流行。没有内置SSH或开放控制面到VPS。
 
 ## 外部验收前不承诺
-本地mock shell测试和Go/Xray集成测试不等于Debian/Ubuntu×amd64/arm64四种真实systemd启动/崩溃验收；Cross-build只证明编译。Cloudflare真实Access路径政策与Verge UI导入也必须上线前测试。
+本地mock shell测试和Go/Xray集成测试不等于Debian/Ubuntu×amd64/arm64四种真实systemd启动/崩溃验收；Cross-build只证明编译。Cloudflare旧Access关闭后的密码登录/设备同步与Verge UI导入也必须上线前测试。

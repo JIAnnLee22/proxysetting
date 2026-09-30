@@ -16,7 +16,7 @@ async function api(path, method = "GET", data) {
     try {
       error = (await response.json()).error;
     } catch {
-      error = "请检查Access登录/部署";
+      error = "请检查管理员密码/部署";
     }
     throw new Error(`${response.status}: ${error}`);
   }

@@ -1,5 +1,5 @@
 # 架构
-浏览器只访问同源 HTTPS Worker。Worker 验证 Cloudflare Access JWT 的 issuer、audience、签名、有效期及明确邮箱名单；设备路径不使用 Access，独立 bearer 凭据。静态资源也先经过 Worker 验证；同源 JSON 管理写操作拒绝跨域 Origin。Worker 返回 `no-store` 和 CSP，不记录请求体/凭据。
+浏览器只访问同源 HTTPS Worker。管理端使用HTTP Basic登录，用户名固定为 `admin`，随机密码来自Worker secret `ADMIN_PASSWORD`；不依赖Cloudflare Access/Zero Trust或邮箱配置。Worker对凭据做SHA256后固定长度对比，密码未配置或无效时503拒绝放行。设备路径独立bearer凭据，不使用管理员密码，也无需Access路径Bypass。静态资源也先经过Worker验证；同源JSON管理写操作拒绝跨域Origin。管理端401带Basic挑战，设备401仍为JSON且不弹登录。Worker返回 `no-store` 和CSP，不记录请求体/凭据。
 
 D1：VPS 期望 revision，身份，VPS×身份独立加密 UUID/必填正 GiB 额度；注册令牌和设备凭据仅 SHA256 哈希。注册15分钟单次CAS消费；设备可轮换/撤销。所有注册信息只包含公有Reality参数。私钥留在VPS的0600配置中。绑定UUID密文的AES-GCM AAD为VPS×身份，UUID_KEY必须32字节保密。
 

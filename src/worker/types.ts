@@ -1,9 +1,7 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
-  ACCESS_TEAM_DOMAIN: string;
-  ACCESS_AUD: string;
-  ADMIN_EMAILS: string;
+  ADMIN_PASSWORD: string;
   UUID_KEY: string;
   RELEASE_REPO: string;
   RELEASE_VERSION: string;
