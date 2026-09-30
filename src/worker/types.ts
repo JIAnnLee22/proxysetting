@@ -1,0 +1,6 @@
+export interface Env { DB: D1Database; ASSETS: Fetcher; ACCESS_TEAM_DOMAIN: string; ACCESS_AUD: string; ADMIN_EMAILS: string; UUID_KEY: string; RELEASE_REPO: string; RELEASE_VERSION: string }
+export interface VPS { id: string; name: string; address: string; port: number; server_name: string; revision: number; public_key: string | null; short_id: string | null; status: string; version: string | null; last_sync: string | null; error: string | null; credential_hash: string | null; revoked: number; enrollment_hash: string | null; enrollment_expires: number | null; upgrade_json: string | null }
+export interface Identity {id: string; name: string; enabled: number}
+export interface Grant {vps_id: string; identity_id: string; uuid_cipher: string; quota_bytes: number}
+export interface DesiredConfig {schema: 1; vpsId: string; revision: number; port: number; serverName: string; users: {id: string; email: string; uuid: string; quotaBytes: number}[]; upgrade: {version: string; url: string; sha256: string} | null}
+export interface Snapshot {schema: 1; sequence: number; month: string; day: string; revision: number; version: string; status: 'ready' | 'error'; error: string; users: {id: string; uplink: number; downlink: number; disabled: boolean}[]}
