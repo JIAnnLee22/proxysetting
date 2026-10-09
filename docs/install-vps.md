@@ -40,6 +40,12 @@ Web“升级版本”输入固定 `vMAJOR.MINOR.PATCH`，Worker只读取已配�
 
 ## 撤销、凭据轮换与重装
 Web撤销使设备下次请求401并停服务；离线VPS需人工停服务。agent rotate CLI轮换设备凭据，旧凭据立刻无效，注意网络丢响应/本地写失败会锁出，要重新注册恢复。重新签发enroll命令撤销旧凭据，不擅自覆盖非空root；先停旧服务并备份配置/状态，人工确认清理/迁移后再安装。新空root从Worker继承已上报本月用量，不抵消旧用量；尚未上报的窗口仅在本地state，**不能丢弃**。注册响应丢失不要重放token，重新签发。
+Release包含 `uninstall.sh`，可用于彻底卸载或在重装前清理环境：
+```bash
+sudo bash uninstall.sh [--root /opt/proxysetting] [--keep-data]
+```
+默认停止并移除systemd服务、重载systemd并删除root目录；添加 `--keep-data` 可保留 `config/` 与 `state/`。
+
 
 ## 上线前环境验证
 需在一次性Debian/Ubuntu×amd64/arm64环境分别验证真安装、再次执行拒绝、端口占用、错误令牌、hash失败、升级/回滚、Watchdog崩溃联动和Xray意外重启。当前本地模拟测试不等于这些环境已验收。Verge Rev人工导入也是单独验收项目。
