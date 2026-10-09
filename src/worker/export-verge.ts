@@ -22,33 +22,51 @@ export async function exportVerge(env: Env, identityId: string) {
     .bind(identityId)
     .all<Grant>();
   const nodes = [];
+  const invalidReasons: string[] = [];
   for (const v of all.results) {
-    assert(
-      (v.status === "ready" || v.status === "syncing") &&
-        !v.revoked &&
-        v.public_key &&
-        v.short_id &&
-        v.address &&
-        v.server_name,
-      `VPS ${v.id} is not ready or missing Reality parameters`,
-      409,
-    );
+    if (
+      (v.status !== "ready" && v.status !== "syncing") ||
+      v.revoked ||
+      !v.public_key ||
+      !v.short_id ||
+      !v.address ||
+      !v.server_name
+    ) {
+      invalidReasons.push(
+        `VPS ${v.id} is not ready or missing Reality parameters`,
+      );
+      continue;
+    }
     const g = grants.results.find((x) => x.vps_id === v.id);
-    assert(g && g.quota_bytes > 0, `Monthly quota missing on VPS ${v.id}`, 409);
-    nodes.push({
-      name: v.name,
-      type: "vless",
-      server: v.address,
-      port: v.port,
-      uuid: await decrypt(env, g.uuid_cipher, `${v.id}:${identityId}`),
-      flow: "xtls-rprx-vision",
-      tls: true,
-      servername: v.server_name,
-      "client-fingerprint": "chrome",
-      "reality-opts": { "public-key": v.public_key, "short-id": v.short_id },
-      network: "tcp",
-      udp: true,
-    });
+    if (!g || !g.quota_bytes || g.quota_bytes <= 0 || !g.uuid_cipher) {
+      invalidReasons.push(`Monthly quota missing on VPS ${v.id}`);
+      continue;
+    }
+    try {
+      const uuid = await decrypt(env, g.uuid_cipher, `${v.id}:${identityId}`);
+      nodes.push({
+        name: v.name,
+        type: "vless",
+        server: v.address,
+        port: v.port,
+        uuid,
+        flow: "xtls-rprx-vision",
+        tls: true,
+        servername: v.server_name,
+        "client-fingerprint": "chrome",
+        "reality-opts": { "public-key": v.public_key, "short-id": v.short_id },
+        network: "tcp",
+        udp: true,
+      });
+    } catch {
+      invalidReasons.push(`Credential decryption failed on VPS ${v.id}`);
+      continue;
+    }
   }
+  assert(
+    nodes.length > 0,
+    invalidReasons[0] || "No ready VPS available",
+    409,
+  );
   return vergeScript(nodes);
 }
