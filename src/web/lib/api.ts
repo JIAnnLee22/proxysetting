@@ -7,7 +7,9 @@ export async function api<T = any>(
   overrideAuthHeader?: string | null
 ): Promise<T> {
   const url = '/api/admin/' + path.replace(/^\//, '')
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    'X-Requested-With': 'XMLHttpRequest'
+  }
 
   if (data) {
     headers['Content-Type'] = 'application/json'

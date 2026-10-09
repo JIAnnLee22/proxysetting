@@ -42,7 +42,8 @@ export default {
       );
       if (
         response.status === 401 &&
-        !new URL(request.url).pathname.startsWith("/api/agent/")
+        !new URL(request.url).pathname.startsWith("/api/agent/") &&
+        request.headers.get("X-Requested-With") !== "XMLHttpRequest"
       )
         response.headers.set(
           "WWW-Authenticate",
