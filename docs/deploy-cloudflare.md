@@ -1,6 +1,6 @@
 # 部署 Cloudflare 免费版
 ## 准备发布
-公开GitHub仓库，代码推送后按 `.github/workflows/release.yml` 发布固定tag（可用首发 `v0.1.1`）；Release需有 install.sh、两架构agent包和SHA256SUMS。首次执行脚本不能仅依赖同一下载源的校验文件：管理员审核源码/CI，取固定install.sh的SHA256，填Worker `INSTALL_SHA256`。Xray官方版本/哈希内置安装器，不用latest下载。
+公开GitHub仓库，代码推送后按 `.github/workflows/release.yml` 发布固定tag（可用首发 `v0.1.1`）；Release需有 install.sh、两架构agent `tar.gz`、两架构Xray `tar.gz` 和SHA256SUMS。VPS不使用ZIP安装包，无需unzip。首次执行脚本不能仅依赖同一下载源的校验文件：管理员审核源码/CI，取固定install.sh的SHA256，填Worker `INSTALL_SHA256`。Xray官方版本/ZIP哈希固定在CI，校验后转为 `tar.gz` 发布，不用latest下载。格式变更需发布新固定tag，不覆盖旧Release；同步Worker的 `RELEASE_VERSION` 和新安装器的 `INSTALL_SHA256`。
 
 ## D1、Worker与Secrets
 ```

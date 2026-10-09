@@ -1,0 +1,12 @@
+Xray-core @XRAY_VERSION@
+
+This archive redistributes the unmodified Xray executable from the official
+XTLS/Xray-core release after verifying the upstream archive's pinned SHA256.
+
+Xray-core source code is available under the Mozilla Public License 2.0
+(MPL-2.0). The source code and license for this fixed version are available at:
+
+Source: https://github.com/XTLS/Xray-core/tree/@XRAY_VERSION@
+Source archive: https://github.com/XTLS/Xray-core/archive/refs/tags/@XRAY_VERSION@.tar.gz
+License: https://github.com/XTLS/Xray-core/blob/@XRAY_VERSION@/LICENSE
+Upstream release: https://github.com/XTLS/Xray-core/releases/tag/@XRAY_VERSION@

@@ -13,7 +13,6 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
-import zipfile
 
 PROJECT = Path(__file__).resolve().parent.parent
 AGENT = 'proxysetting-agent.service'
@@ -38,22 +37,15 @@ elif name == 'ss':
     if env('MOCK_BUSY_PORT') and args[-1] == 'sport = :' + env('MOCK_BUSY_PORT'): print('LISTEN 0 128 0.0.0.0:' + env('MOCK_BUSY_PORT'))
 elif name == 'sha256sum':
     path = pathlib.Path(args[-1])
-    if path.name == 'xray.zip' and not env('MOCK_BAD_XRAY'):
-        digest = ('4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c'
-                  if env('MOCK_ARCH') in ['aarch64', 'arm64'] else
-                  '23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae')
-        print(digest + '  ' + str(path))
+    if path.name == 'xray.tar.gz' and env('MOCK_BAD_XRAY'):
+        print('0' * 64 + '  ' + str(path))
     else: os.execv(env('REAL_SHA'), [env('REAL_SHA')] + args)
 elif name == 'curl':
     dest = pathlib.Path(args[args.index('--output') + 1]); url = args[-1]
     if env('MOCK_DOWNLOAD_FAIL') and env('MOCK_DOWNLOAD_FAIL') in url: fail()
-    if '/XTLS/Xray-core/releases/download/v26.3.27/' in url:
-        if not url.endswith(('Xray-linux-64.zip', 'Xray-linux-arm64-v8a.zip')): fail()
-        src = base / 'assets' / 'xray.zip'
-    else:
-        if not url.startswith('https://github.com/owner/repo/releases/download/'): fail()
-        version, asset = url.split('/download/', 1)[1].split('/', 1)
-        src = base / 'assets' / version / asset
+    if not url.startswith('https://github.com/owner/repo/releases/download/'): fail()
+    version, asset = url.split('/download/', 1)[1].split('/', 1)
+    src = base / 'assets' / version / asset
     if not src.is_file(): fail()
     shutil.copyfile(src, dest)
 elif name == 'systemctl':
@@ -160,8 +152,6 @@ class InstallerTests(unittest.TestCase):
             path = self.base / 'mocks' / command
             path.write_text(MOCK)
             path.chmod(0o755)
-        with zipfile.ZipFile(self.base / 'assets' / 'xray.zip', 'w') as archive:
-            archive.writestr('xray', FAKE_XRAY)
         for version in ['v0.1.0', 'v0.2.0', 'v0.3.0']:
             self.release(version)
 
@@ -180,12 +170,19 @@ class InstallerTests(unittest.TestCase):
                     member.size = len(data)
                     member.mode = 0o755 if filename.startswith('bin/') else 0o644
                     archive.addfile(member, io.BytesIO(data))
+            with tarfile.open(directory / f'proxysetting-xray-linux-{arch}.tar.gz', 'w:gz') as archive:
+                data = FAKE_XRAY.encode()
+                member = tarfile.TarInfo('bin/xray')
+                member.size = len(data)
+                member.mode = 0o755
+                archive.addfile(member, io.BytesIO(data))
         self.manifest(version)
 
     def manifest(self, version):
         directory = self.base / 'assets' / version
         lines = [hashlib.sha256((directory / name).read_bytes()).hexdigest() + '  ' + name
-                 for name in ['install.sh', 'proxysetting-agent-linux-amd64.tar.gz', 'proxysetting-agent-linux-arm64.tar.gz']]
+                 for name in ['install.sh', 'proxysetting-agent-linux-amd64.tar.gz', 'proxysetting-agent-linux-arm64.tar.gz',
+                              'proxysetting-xray-linux-amd64.tar.gz', 'proxysetting-xray-linux-arm64.tar.gz']]
         (directory / 'SHA256SUMS').write_text('\n'.join(lines) + '\n')
 
     def call(self, args=None, expected=0, **extra):
@@ -229,21 +226,21 @@ class InstallerTests(unittest.TestCase):
         for path in ['config/agent.json', 'config/xray.json', 'state/usage.json', 'config/release.env']:
             self.assertEqual((self.root / path).stat().st_mode & 0o777, 0o600)
         self.assertIn(AGENT, self.active())
-        self.assertIn('Xray-linux-64.zip', self.events())
+        self.assertIn('proxysetting-xray-linux-amd64.tar.gz', self.events())
         self.assertNotIn(' --token ', self.events())
         self.assertNotIn(TOKEN, self.events())
 
     def test_install_ubuntu_arm64(self):
         (self.base / 'os-release').write_text('ID="ubuntu"\n')
         self.call(MOCK_ARCH='aarch64')
-        self.assertIn('Xray-linux-arm64-v8a.zip', self.events())
+        self.assertIn('proxysetting-xray-linux-arm64.tar.gz', self.events())
 
     def test_install_arch_amd64(self):
         (self.base / 'os-release').write_text('ID=arch\n')
         self.call()
         self.assertEqual(self.current(), 'v0.1.0')
         self.assertIn(AGENT, self.active())
-        self.assertIn('Xray-linux-64.zip', self.events())
+        self.assertIn('proxysetting-xray-linux-amd64.tar.gz', self.events())
 
     def test_initial_fixed_newer_version(self):
         args = ['--control-url', 'https://control.example', '--address', '203.0.113.10',

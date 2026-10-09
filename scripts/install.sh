@@ -41,7 +41,7 @@ valid_version() { [[ $1 =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ 
 valid_repo() { [[ $1 =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$ && $1 != */. && $1 != */.. ]]; }
 [[ $(id -u) == 0 ]] || die 'root is required'
 [[ $ROOT =~ ^/[A-Za-z0-9_./-]+$ && $ROOT != / && $ROOT != */ && $ROOT != *//* && $ROOT != */../* && $ROOT != */.. && $ROOT != */./* && $ROOT != */. ]] || die 'root must be a safe absolute path without dot segments or trailing slash'
-for cmd in systemctl curl sha256sum tar unzip ss flock realpath stat cmp awk sed install mktemp readlink find sort sync; do
+for cmd in systemctl curl sha256sum tar gzip ss flock realpath stat cmp awk sed install mktemp readlink find sort sync; do
     command -v "$cmd" >/dev/null || die "missing prerequisite: $cmd (install it manually)"
 done
 [[ $(realpath -m -- "$ROOT") == "$ROOT" ]] || die 'root or its parent must not be a symlink'
@@ -51,11 +51,11 @@ systemctl show --property=Version --value >/dev/null 2>&1 || die 'systemd manage
 os_id=$(awk -F= '$1=="ID" {gsub(/"/, "", $2); print $2}' /etc/os-release)
 [[ $os_id == debian || $os_id == ubuntu || $os_id == arch ]] || die 'only Debian, Ubuntu and Arch Linux are supported'
 case "$(uname -m)" in
-    x86_64|amd64) ARCH=amd64; XRAY_ASSET='Xray-linux-64.zip'; XRAY_SHA='23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae' ;;
-    aarch64|arm64) ARCH=arm64; XRAY_ASSET='Xray-linux-arm64-v8a.zip'; XRAY_SHA='4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c' ;;
+    x86_64|amd64) ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
     *) die 'only amd64 and arm64 are supported' ;;
 esac
-readonly ARCH XRAY_ASSET XRAY_SHA
+readonly ARCH
 
 render_unit() { sed "s|@ROOT@|$ROOT|g" "$1"; }
 unit_absent() {
@@ -237,7 +237,7 @@ extract_member() {
     [[ -s $output ]] || die 'empty release archive member'
 }
 stage_release() {
-    local base archive
+    local base archive xray_archive
     NEW_RELEASE="$ROOT/releases/$VERSION"
     [[ ! -e $NEW_RELEASE && ! -L $NEW_RELEASE ]] || die 'release directory already exists; refusing to overwrite'
     base="https://github.com/$REPO/releases/download/$VERSION"
@@ -247,15 +247,15 @@ stage_release() {
     download "$base/install.sh" "$WORK/install.sh"
     verify_digest "$WORK/agent.tar.gz" "$(release_digest "$archive")"
     verify_digest "$WORK/install.sh" "$(release_digest install.sh)"
-    download "https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION/$XRAY_ASSET" "$WORK/xray.zip"
-    verify_digest "$WORK/xray.zip" "$XRAY_SHA"
+    xray_archive="proxysetting-xray-linux-$ARCH.tar.gz"
+    download "$base/$xray_archive" "$WORK/xray.tar.gz"
+    verify_digest "$WORK/xray.tar.gz" "$(release_digest "$xray_archive")"
     install -d -m 0755 "$WORK/release/bin" "$WORK/release/packaging"
     extract_member "$WORK/agent.tar.gz" 'bin/proxysetting-agent' "$WORK/release/bin/proxysetting-agent"
     for unit in "$AGENT_UNIT" "$XRAY_UNIT"; do
         extract_member "$WORK/agent.tar.gz" "packaging/$unit" "$WORK/release/packaging/$unit"
     done
-    unzip -p "$WORK/xray.zip" xray >"$WORK/release/bin/xray"
-    [[ -s $WORK/release/bin/xray ]] || die 'official Xray archive has no binary'
+    extract_member "$WORK/xray.tar.gz" 'bin/xray' "$WORK/release/bin/xray"
     install -m 0755 "$WORK/install.sh" "$WORK/release/install.sh"
     chmod 0755 "$WORK/release/bin/"*; chmod 0644 "$WORK/release/packaging/"*
     [[ $("$WORK/release/bin/proxysetting-agent" --version) == "$VERSION" ]] || die 'agent binary version does not match pinned release'

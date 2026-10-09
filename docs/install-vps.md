@@ -1,13 +1,23 @@
 # VPS 安装、升级与恢复
-支持Debian/Ubuntu/Arch Linux、systemd、amd64/arm64，root执行。Xray固定官方 `v26.3.27`，ZIP SHA256内置；可用首发agent `v0.1.1`。VPS无需自有域名。**不要在已有代理机器上直接覆盖**：安装器拒绝非空root、同名systemd服务、443/所选端口和API10085占用。
+支持Debian/Ubuntu/Arch Linux、systemd、amd64/arm64，root执行。Xray固定官方 `v26.3.27`，由CI校验官方ZIP SHA256后转为项目Release的 `tar.gz`；VPS只用 `tar` 解压，不需要 `unzip`。本安装器须使用包含下述四个 `tar.gz` 资产的新固定Release，不能混用缺少Xray包的旧tag。VPS无需自有域名。**不要在已有代理机器上直接覆盖**：安装器拒绝非空root、同名systemd服务、443/所选端口和API10085占用。
 
 ## 安装
-1. 先人工安装必要工具：Debian/Ubuntu上 `apt-get update && apt-get install -y curl tar unzip iproute2 util-linux coreutils`。Arch Linux使用 `pacman -Syu --needed curl tar unzip iproute2 util-linux coreutils ca-certificates`。安装器不自动改包管理器/防火墙。
+1. 先人工安装必要工具：Debian/Ubuntu上 `apt-get update && apt-get install -y curl tar gzip iproute2 util-linux coreutils`。Arch Linux使用 `pacman -Syu --needed curl tar gzip iproute2 util-linux coreutils ca-certificates`。安装器不自动改包管理器/防火墙。
 2. Web添加名称、公网IPv4/IPv6（首版仅字面IP，不接受DNS或私网地址）、端口和Reality候选目标。候选如www.cloudflare.com/www.microsoft.com/www.apple.com；安装时TLS1.3不通则失败，不部署。TLS1.3仅是必要条件，不保证Reality握手兼容：本次Arch VPS上www.microsoft.com通过TLS探测但Reality失败，www.cloudflare.com通过实际公网客户端验证。目标须逐台实测，不要求属于自己。
 3. 443冲突或目标TLS测试失败时，在Web“修改未部署参数”选择其他端口/目标；这会使旧令牌失效，需重新生成命令。已注册设备不能在线改地址/端口/目标，须显式重装。Web生成一次性命令，确认GitHub仓库/tag/脚本SHA256。root在**对应VPS**执行，15分钟有效一次消费；命令先下载校验脚本再运行，不直接curl|bash。token会出现在一次性命令里，关闭shell历史，勿贴入日志/聊天。
 4. 安装器完成权限/系统/架构/端口检查，下载校验双组件，agent生成本地Reality私钥、公钥/shortId、Xray配置，测试后注册，原子切换current并启动独立服务。仅公有Reality参数上传Worker。
 5. 手动检查主机防火墙和云安全组，放行Reality所选TCP端口（默认443），**不要开放10085**。安装器不关闭防火墙，也不能代替云控制台放行。
 6. 创建身份，每VPS填写正GiB月额度后才开通，等待ready/最新revision，再导出JS。额度耗尽不删除导出节点。
+
+## 发布包格式
+项目Release发布 `proxysetting-agent-linux-{amd64,arm64}.tar.gz` 和 `proxysetting-xray-linux-{amd64,arm64}.tar.gz`，由同一固定版本的 `SHA256SUMS` 校验。安装器先校验，再用 `tar` 流式读取指定成员，不直接展开归档路径。
+人工查看/解压已校验的包（以amd64为例）：
+```bash
+tar -tzf proxysetting-agent-linux-amd64.tar.gz
+tar -xzf proxysetting-agent-linux-amd64.tar.gz
+tar -xzf proxysetting-xray-linux-amd64.tar.gz
+```
+GitHub自动生成的 `Source code (zip)` 和Actions下载时的ZIP外层不是VPS安装包；部署应使用Release中的上述 `tar.gz` 资产。
 
 ## 文件与健康
 默认 `/opt/proxysetting`：`releases/VERSION`固定产物，`current`/`previous`链接，`config/agent.json`/`xray.json`/`release.env`，`state/usage.json`。私钥和凭据/状态0600，目录0700；备份必须保密。
