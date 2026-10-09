@@ -36,7 +36,7 @@ export async function exportVerge(env: Env, identityId: string) {
     const g = grants.results.find((x) => x.vps_id === v.id);
     assert(g && g.quota_bytes > 0, `Monthly quota missing on VPS ${v.id}`, 409);
     nodes.push({
-      name: `VPS-${v.id}`,
+      name: v.name,
       type: "vless",
       server: v.address,
       port: v.port,

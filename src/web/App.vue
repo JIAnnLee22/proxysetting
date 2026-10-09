@@ -75,17 +75,27 @@ const currentData = computed(() => {
 
 async function fetchStats() {
   loadingStats.value = true
-  const todayDate = new Date(Date.now() + 8 * 3600 * 1000)
-  const today = todayDate.toISOString().slice(0, 10)
+  const nowUtc8 = new Date(Date.now() + 8 * 3600 * 1000)
+  const today = nowUtc8.toISOString().slice(0, 10)
   const thisMonth = today.slice(0, 7)
   const thisYear = today.slice(0, 4)
 
   try {
     if (timeDimension.value === 'daily') {
-      const res = await api<PeriodData[]>(`analytics?type=daily&start=${today}&end=${today}`)
+      const sevenDaysAgo = new Date(nowUtc8.getTime() - 6 * 86400000).toISOString().slice(0, 10)
+      const res = await api<PeriodData[]>(`analytics?type=daily&start=${sevenDaysAgo}&end=${today}`)
       dailyData.value = Array.isArray(res) ? res : []
     } else if (timeDimension.value === 'monthly') {
-      const res = await api<PeriodData[]>(`analytics?type=month&start=${thisMonth}&end=${thisMonth}`)
+      const currYear = parseInt(today.slice(0, 4), 10)
+      const currMonth = parseInt(today.slice(5, 7), 10)
+      let startYear = currYear
+      let startMonthNum = currMonth - 5
+      if (startMonthNum <= 0) {
+        startMonthNum += 12
+        startYear -= 1
+      }
+      const startMonth = `${startYear}-${String(startMonthNum).padStart(2, '0')}`
+      const res = await api<PeriodData[]>(`analytics?type=month&start=${startMonth}&end=${thisMonth}`)
       monthlyData.value = Array.isArray(res) ? res : []
     } else if (timeDimension.value === 'yearly') {
       const [h1, h2] = await Promise.all([

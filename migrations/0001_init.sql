@@ -25,3 +25,4 @@ CREATE TABLE rate_limits (key TEXT PRIMARY KEY, window INTEGER NOT NULL, count I
 CREATE INDEX grants_identity ON grants(identity_id);
 CREATE INDEX usage_period ON usage_periods(period);
 CREATE INDEX enrollment_expiry ON vps(enrollment_expires);
+CREATE UNIQUE INDEX IF NOT EXISTS vps_name ON vps(name);

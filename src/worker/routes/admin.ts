@@ -64,16 +64,21 @@ export async function adminRoutes(
   if (path === "/api/admin/vps" && request.method === "POST") {
     const b = await body(request);
     const id = crypto.randomUUID();
+    const name = text(b.name, "name");
     assert(
       b.port !== 10085,
       "Reality port must differ from local API port 10085",
     );
+    const existing = await env.DB.prepare("SELECT id FROM vps WHERE name=?")
+      .bind(name)
+      .first();
+    assert(!existing, "VPS name already exists", 409);
     const r = await env.DB.prepare(
       "INSERT INTO vps(id,name,address,port,server_name) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM vps)<10",
     )
       .bind(
         id,
-        text(b.name, "name"),
+        name,
         address(b.address),
         integer(b.port, "port", 1, 65535),
         hostname(b.serverName),
@@ -85,26 +90,65 @@ export async function adminRoutes(
   const vm = /^\/api\/admin\/vps\/([a-f0-9-]{36})$/.exec(path);
   if (vm && request.method === "PATCH") {
     const b = await body(request);
-    assert(
-      b.port !== 10085,
-      "Reality port must differ from local API port 10085",
-    );
-    const result = await env.DB.prepare(
-      "UPDATE vps SET name=?,address=?,port=?,server_name=?,revision=revision+1,enrollment_hash=NULL,enrollment_expires=NULL,error=NULL WHERE id=? AND status='pending' AND credential_hash IS NULL AND public_key IS NULL",
-    )
-      .bind(
-        text(b.name, "name"),
-        address(b.address),
-        integer(b.port, "port", 1, 65535),
-        hostname(b.serverName),
-        vm[1],
+    const vps = await env.DB.prepare("SELECT * FROM vps WHERE id=?")
+      .bind(vm[1])
+      .first<VPS>();
+    assert(vps, "VPS not found", 404);
+
+    const hasAddress = b.address !== undefined;
+    const hasPort = b.port !== undefined;
+    const hasServerName = b.serverName !== undefined;
+
+    const addressChanged = hasAddress && b.address !== vps.address;
+    const portChanged = hasPort && b.port !== vps.port;
+    const serverNameChanged = hasServerName && b.serverName !== vps.server_name;
+    const netParamsChanged = addressChanged || portChanged || serverNameChanged;
+
+    if (netParamsChanged) {
+      assert(
+        vps.status === "pending" &&
+          vps.credential_hash === null &&
+          vps.public_key === null,
+        "Only unregistered VPS parameters can be edited; registered devices require explicit reinstall",
+        409,
+      );
+      const newPort = integer(b.port ?? vps.port, "port", 1, 65535);
+      assert(
+        newPort !== 10085,
+        "Reality port must differ from local API port 10085",
+      );
+      const newAddress = address(b.address ?? vps.address);
+      const newServerName = hostname(b.serverName ?? vps.server_name);
+      const newName = b.name !== undefined ? text(b.name, "name") : vps.name;
+      if (newName !== vps.name) {
+        const existing = await env.DB.prepare(
+          "SELECT id FROM vps WHERE name=? AND id != ?",
+        )
+          .bind(newName, vm[1])
+          .first();
+        assert(!existing, "VPS name already exists", 409);
+      }
+      await env.DB.prepare(
+        "UPDATE vps SET name=?,address=?,port=?,server_name=?,revision=revision+1,enrollment_hash=NULL,enrollment_expires=NULL,error=NULL WHERE id=?",
       )
+        .bind(newName, newAddress, newPort, newServerName, vm[1])
+        .run();
+      return json({ ok: true });
+    }
+
+    assert(b.name !== undefined, "name required");
+    const newName = text(b.name, "name");
+    if (newName !== vps.name) {
+      const existing = await env.DB.prepare(
+        "SELECT id FROM vps WHERE name=? AND id != ?",
+      )
+        .bind(newName, vm[1])
+        .first();
+      assert(!existing, "VPS name already exists", 409);
+    }
+    await env.DB.prepare("UPDATE vps SET name=? WHERE id=?")
+      .bind(newName, vm[1])
       .run();
-    assert(
-      result.meta.changes === 1,
-      "Only unregistered VPS parameters can be edited; registered devices require explicit reinstall",
-      409,
-    );
     return json({ ok: true });
   }
   if (path === "/api/admin/identities" && request.method === "POST") {

@@ -74,10 +74,10 @@ function initOrUpdateChart() {
       labels: props.labels,
       datasets: [
         {
-          label: '下行流量 (Downlink)',
-          data: props.downlinkData,
-          borderColor: colors.downLine,
-          backgroundColor: colors.downFill,
+          label: '上行流量 (Uplink)',
+          data: props.uplinkData,
+          borderColor: colors.upLine,
+          backgroundColor: colors.upFill,
           fill: true,
           tension: 0.35,
           pointRadius: 3,
@@ -85,10 +85,10 @@ function initOrUpdateChart() {
           borderWidth: 2
         },
         {
-          label: '上行流量 (Uplink)',
-          data: props.uplinkData,
-          borderColor: colors.upLine,
-          backgroundColor: colors.upFill,
+          label: '下行流量 (Downlink)',
+          data: props.downlinkData,
+          borderColor: colors.downLine,
+          backgroundColor: colors.downFill,
           fill: true,
           tension: 0.35,
           pointRadius: 3,

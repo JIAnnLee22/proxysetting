@@ -52,6 +52,14 @@ const editVpsData = ref({
   serverName: ''
 })
 
+// Rename VPS Modal
+const showRenameModal = ref(false)
+const renamingVps = ref(false)
+const renameVpsData = ref({
+  id: '',
+  name: ''
+})
+
 // Install / Enroll Modal
 const showEnrollModal = ref(false)
 const enrolling = ref(false)
@@ -92,7 +100,8 @@ function copyAddress(vps: any) {
 
 // Add VPS
 async function handleAddVps() {
-  if (!newVps.value.name.trim() || !newVps.value.address.trim()) {
+  const nameTrimmed = newVps.value.name.trim()
+  if (!nameTrimmed || !newVps.value.address.trim()) {
     showToast('请完整填写节点名称和公网地址', 'warning')
     return
   }
@@ -100,20 +109,29 @@ async function handleAddVps() {
     showToast('Reality 端口不能为内部 API 端口 10085', 'warning')
     return
   }
+  const duplicate = (props.state?.vps || []).some((v: any) => v.name === nameTrimmed)
+  if (duplicate) {
+    showToast(`节点名称 “${nameTrimmed}” 已存在，请使用其他名称`, 'warning')
+    return
+  }
   addingVps.value = true
   try {
     await api('vps', 'POST', {
-      name: newVps.value.name.trim(),
+      name: nameTrimmed,
       address: newVps.value.address.trim(),
       port: Number(newVps.value.port),
       serverName: newVps.value.serverName.trim()
     })
-    showToast(`成功添加节点 “${newVps.value.name}”`, 'success')
+    showToast(`成功添加节点 “${nameTrimmed}”`, 'success')
     showAddModal.value = false
     newVps.value = { name: '', address: '', port: 443, serverName: 'gateway.icloud.com' }
     emit('refresh')
   } catch (e: any) {
-    showToast(e.message || '添加节点失败', 'error')
+    let msg = e.message || '添加节点失败'
+    if (msg.includes('VPS name already exists')) {
+      msg = `节点名称 “${nameTrimmed}” 已存在，请使用其他名称`
+    }
+    showToast(msg, 'error')
   } finally {
     addingVps.value = false
   }
@@ -131,7 +149,60 @@ function openEditModal(vps: any) {
   showEditModal.value = true
 }
 
+// Open Rename Modal
+function openRenameModal(vps: any) {
+  renameVpsData.value = {
+    id: vps.id,
+    name: vps.name
+  }
+  showRenameModal.value = true
+}
+
+async function handleRenameVps() {
+  const trimmed = renameVpsData.value.name.trim()
+  if (!trimmed) {
+    showToast('节点名称不能为空', 'warning')
+    return
+  }
+  const duplicate = (props.state?.vps || []).some(
+    (v: any) => v.id !== renameVpsData.value.id && v.name === trimmed
+  )
+  if (duplicate) {
+    showToast(`节点名称 “${trimmed}” 已被其他节点使用`, 'warning')
+    return
+  }
+  renamingVps.value = true
+  try {
+    await api(`vps/${renameVpsData.value.id}`, 'PATCH', {
+      name: trimmed
+    })
+    showToast(`节点名称已更新为 “${trimmed}”`, 'success')
+    showRenameModal.value = false
+    emit('refresh')
+  } catch (e: any) {
+    let msg = e.message || '修改节点名称失败'
+    if (msg.includes('VPS name already exists')) {
+      msg = `节点名称 “${trimmed}” 已被其他节点使用`
+    }
+    showToast(msg, 'error')
+  } finally {
+    renamingVps.value = false
+  }
+}
+
 async function handleEditVps() {
+  const nameTrimmed = editVpsData.value.name.trim()
+  if (!nameTrimmed) {
+    showToast('节点名称不能为空', 'warning')
+    return
+  }
+  const duplicate = (props.state?.vps || []).some(
+    (v: any) => v.id !== editVpsData.value.id && v.name === nameTrimmed
+  )
+  if (duplicate) {
+    showToast(`节点名称 “${nameTrimmed}” 已被其他节点使用`, 'warning')
+    return
+  }
   if (editVpsData.value.port === 10085) {
     showToast('Reality 端口不能为内部 API 端口 10085', 'warning')
     return
@@ -139,16 +210,20 @@ async function handleEditVps() {
   editingVps.value = true
   try {
     await api(`vps/${editVpsData.value.id}`, 'PATCH', {
-      name: editVpsData.value.name,
-      address: editVpsData.value.address,
+      name: nameTrimmed,
+      address: editVpsData.value.address.trim(),
       port: Number(editVpsData.value.port),
-      serverName: editVpsData.value.serverName
+      serverName: editVpsData.value.serverName.trim()
     })
     showToast('参数已更新，请重新生成安装注册命令', 'success')
     showEditModal.value = false
     emit('refresh')
   } catch (e: any) {
-    showToast(e.message || '修改参数失败', 'error')
+    let msg = e.message || '修改参数失败'
+    if (msg.includes('VPS name already exists')) {
+      msg = `节点名称 “${nameTrimmed}” 已被其他节点使用`
+    }
+    showToast(msg, 'error')
   } finally {
     editingVps.value = false
   }
@@ -323,7 +398,14 @@ async function confirmRevoke() {
               </div>
               <div>
                 <h3 class="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  {{ v.name }}
+                  <span>{{ v.name }}</span>
+                  <button
+                    @click="openRenameModal(v)"
+                    title="修改节点名称"
+                    class="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <Edit3 class="w-3.5 h-3.5" />
+                  </button>
                 </h3>
                 <div class="flex items-center gap-2 mt-0.5">
                   <span class="text-xs font-mono text-slate-500 dark:text-slate-400">{{ v.address }}:{{ v.port }}</span>
@@ -394,14 +476,23 @@ async function confirmRevoke() {
         <!-- Card Footer Actions -->
         <div class="p-4 bg-slate-50/70 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-1.5 flex-wrap">
+            <!-- Edit name -->
+            <button
+              @click="openRenameModal(v)"
+              class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              <Edit3 class="w-3.5 h-3.5" />
+              <span>修改名称</span>
+            </button>
+
             <!-- Edit params if pending -->
             <button
               v-if="v.status === 'pending' && !v.public_key"
               @click="openEditModal(v)"
               class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
             >
-              <Edit3 class="w-3.5 h-3.5" />
-              <span>修改参数</span>
+              <Server class="w-3.5 h-3.5" />
+              <span>修改网络参数</span>
             </button>
 
             <!-- Upgrade version -->
@@ -451,6 +542,9 @@ async function confirmRevoke() {
             placeholder="例如: US-West, Tokyo-01"
             class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
           />
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
+            节点名称需保持唯一，将作为订阅客户端中的节点显示标识。
+          </p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -514,6 +608,44 @@ async function confirmRevoke() {
             class="px-4 py-2 text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all cursor-pointer"
           >
             {{ addingVps ? '添加中...' : '确认添加' }}
+          </button>
+        </div>
+      </form>
+    </Modal>
+
+    <!-- Rename VPS Modal -->
+    <Modal v-model="showRenameModal" title="修改节点名称" max-width="md">
+      <form @submit.prevent="handleRenameVps" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+            节点名称
+          </label>
+          <input
+            v-model="renameVpsData.name"
+            type="text"
+            required
+            placeholder="例如: US-West, Tokyo-01, 香港-优质"
+            class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          />
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
+            修改后将同步更新控制台展示与订阅扩展脚本中的节点名称。
+          </p>
+        </div>
+
+        <div class="pt-2 flex justify-end gap-2.5">
+          <button
+            type="button"
+            @click="showRenameModal = false"
+            class="px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            :disabled="renamingVps || !renameVpsData.name.trim()"
+            class="px-4 py-2 text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all cursor-pointer"
+          >
+            {{ renamingVps ? '保存中...' : '保存名称' }}
           </button>
         </div>
       </form>

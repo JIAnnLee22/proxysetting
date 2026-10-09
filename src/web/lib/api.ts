@@ -11,7 +11,8 @@ export async function api<T = any>(
     'X-Requested-With': 'XMLHttpRequest'
   }
 
-  if (data) {
+  // Mutating admin requests require JSON Content-Type even without a body.
+  if (data || !['GET', 'HEAD'].includes(method.toUpperCase())) {
     headers['Content-Type'] = 'application/json'
   }
 

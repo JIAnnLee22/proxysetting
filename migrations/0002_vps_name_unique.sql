@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS vps_name ON vps(name);

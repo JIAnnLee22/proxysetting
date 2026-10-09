@@ -37,6 +37,37 @@ const aggr = computed(() => {
 
 const totalBytes = computed(() => aggr.value.totalUp + aggr.value.totalDown)
 
+const todayDateStr = computed(() => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10))
+const thisMonthStr = computed(() => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7))
+
+const thisPeriodBytes = computed(() => {
+  if (props.timeDimension === 'daily') {
+    let total = 0
+    for (const row of props.currentData) {
+      const key = row.daily ? row.daily.date : row.period
+      if (key === todayDateStr.value) {
+        const list = row.daily ? row.daily.users : row.users
+        for (const u of list) {
+          total += u.uplink + u.downlink
+        }
+      }
+    }
+    return total
+  }
+  if (props.timeDimension === 'monthly') {
+    let total = 0
+    for (const row of props.currentData) {
+      if (row.period === thisMonthStr.value) {
+        for (const u of row.users || []) {
+          total += u.uplink + u.downlink
+        }
+      }
+    }
+    return total
+  }
+  return null
+})
+
 // Sorted users list
 const sortedUsers = computed(() => {
   const list = Array.from(aggr.value.users.entries()).map(([id, stats]) => ({
@@ -138,8 +169,8 @@ function getUserName(id: string) {
       <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
         <button
           v-for="d in [
-            { id: 'daily', label: '今日 (Daily)' },
-            { id: 'monthly', label: '本月 (Monthly)' },
+            { id: 'daily', label: '近 7 天 (Daily)' },
+            { id: 'monthly', label: '近 6 个月 (Monthly)' },
             { id: 'yearly', label: '本年 (Yearly)' }
           ]"
           :key="d.id"
@@ -162,7 +193,7 @@ function getUserName(id: string) {
       <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
         <div class="flex items-center justify-between mb-3">
           <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">
-            {{ timeDimension === 'daily' ? '今日' : timeDimension === 'monthly' ? '本月' : '本年' }}总量
+            {{ timeDimension === 'daily' ? '近 7 天' : timeDimension === 'monthly' ? '近 6 个月' : '本年' }}总量
           </span>
           <div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
             <Activity class="w-4 h-4" />
@@ -175,6 +206,9 @@ function getUserName(id: string) {
           <span class="text-blue-600 dark:text-blue-400 font-medium">↑ {{ formatBytes(aggr.totalUp) }}</span>
           <span>•</span>
           <span class="text-emerald-600 dark:text-emerald-400 font-medium">↓ {{ formatBytes(aggr.totalDown) }}</span>
+          <span v-if="thisPeriodBytes !== null" class="ml-auto text-slate-400 font-normal">
+            {{ timeDimension === 'daily' ? '今日' : '当月' }}: {{ formatBytes(thisPeriodBytes) }}
+          </span>
         </div>
       </div>
 
@@ -235,7 +269,9 @@ function getUserName(id: string) {
             <TrendingUp class="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span>流量走势曲线</span>
           </h3>
-          <p class="text-xs text-slate-400 mt-0.5">按时间周期划分的上下行带宽消耗趋势</p>
+          <p class="text-xs text-slate-400 mt-0.5">
+            {{ timeDimension === 'daily' ? '近 7 天按日上下行消耗趋势' : timeDimension === 'monthly' ? '近 6 个月按月消耗趋势' : '本年度各月消耗趋势' }}
+          </p>
         </div>
       </div>
 
