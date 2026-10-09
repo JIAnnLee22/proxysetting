@@ -26,6 +26,7 @@ func (s *slowControl) Config(ctx context.Context, _ uint64) (model.Desired, erro
 	}
 	return model.Desired{}, control.ErrNetwork
 }
+func (s *slowControl) Seed(context.Context) (*model.Daily, error) { return nil, nil }
 func (s *slowControl) Snapshot(ctx context.Context, _ model.Snapshot) error {
 	select {
 	case <-ctx.Done():

@@ -30,7 +30,7 @@ func NewDaily(now time.Time) *DailyState {
 }
 
 func (s *DailyState) Validate() error {
-	t, e := time.ParseInLocation("2006-01-02", s.Date, model.Beijing)
+	_, e := time.ParseInLocation("2006-01-02", s.Date, model.Beijing)
 	if e != nil || s.Date == "" {
 		return ErrState
 	}
@@ -141,4 +141,3 @@ func (s *DailyState) Prune(now time.Time) {
 	}
 	s.Archives = kept
 }
-

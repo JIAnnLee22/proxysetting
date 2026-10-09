@@ -179,7 +179,7 @@ func TestRealXrayRuntime(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	now := time.Date(2026, 9, 30, 15, 59, 50, 0, time.UTC)
-	d := &Daemon{Root: root, Version: "v0.1.0", Config: c, State: usage.New(now), API: api, Control: &fakeControl{config: desired}, Save: state.Save, Now: func() time.Time { return now }, active: map[string]string{}}
+	d := &Daemon{Root: root, Version: "v0.1.0", Config: c, State: usage.New(now), Daily: usage.NewDaily(now), API: api, Control: &fakeControl{config: desired}, Save: state.Save, Now: func() time.Time { return now }, active: map[string]string{}}
 	if e = d.Sample(context.Background(), true); e != nil {
 		t.Fatal(e)
 	}

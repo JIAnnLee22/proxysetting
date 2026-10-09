@@ -62,6 +62,7 @@ type fakeControl struct {
 }
 
 func (f *fakeControl) Config(context.Context, uint64) (model.Desired, error) { return f.config, f.err }
+func (f *fakeControl) Seed(context.Context) (*model.Daily, error)            { return nil, nil }
 func (f *fakeControl) Snapshot(_ context.Context, p model.Snapshot) error {
 	b, _ := json.Marshal(p)
 	var copy model.Snapshot
@@ -80,7 +81,12 @@ func fixture(t *testing.T) (*Daemon, *fakeAPI, *fakeControl, *[]string) {
 	}
 	api := &fakeAPI{users: map[string]model.User{}, counter: map[string]xray.Counter{}, events: &events, uptime: 100}
 	client := &fakeControl{config: config}
-	d := &Daemon{Root: root, Version: "v0.1.0", Config: model.Installed{VPSID: "vps1", Port: 443, ServerName: config.ServerName, Desired: config}, State: usage.New(now), API: api, Control: client, Now: func() time.Time { return now }, active: map[string]string{}, Save: func(path string, v any) error { events = append(events, "save"); return state.Save(path, v) }, Notify: func(s string) error { events = append(events, s); return nil }, StopXray: func(context.Context) error { events = append(events, "stop"); return nil }}
+	d := &Daemon{Root: root, Version: "v0.1.0", Config: model.Installed{VPSID: "vps1", Port: 443, ServerName: config.ServerName, Desired: config}, State: usage.New(now), Daily: usage.NewDaily(now), API: api, Control: client, Now: func() time.Time { return now }, active: map[string]string{}, Save: func(path string, v any) error {
+		if filepath.Base(path) == "usage.json" {
+			events = append(events, "save")
+		}
+		return state.Save(path, v)
+	}, Notify: func(s string) error { events = append(events, s); return nil }, StopXray: func(context.Context) error { events = append(events, "stop"); return nil }}
 	return d, api, client, &events
 }
 func TestDurableBeforeAddRemoveAndStartupRebuild(t *testing.T) {

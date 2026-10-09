@@ -20,7 +20,7 @@ func at(s string) time.Time {
 }
 func sample(t *testing.T, s *State, now time.Time, up, down uint64, reset bool, d model.Desired) {
 	t.Helper()
-	if e := s.Sample(now, map[string]xray.Counter{"alice@proxysetting": {Up: up, Down: down}}, reset, d, "v0.1.0"); e != nil {
+	if _, e := s.Sample(now, map[string]xray.Counter{"alice@proxysetting": {Up: up, Down: down}}, reset, d, "v0.1.0"); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -39,7 +39,7 @@ func TestCountersAndReset(t *testing.T) {
 		t.Fatal(v)
 	}
 	// Missing counters do not erase a baseline.
-	if e := s.Sample(now.Add(40*time.Second), map[string]xray.Counter{}, false, d, "v0.1.0"); e != nil {
+	if _, e := s.Sample(now.Add(40*time.Second), map[string]xray.Counter{}, false, d, "v0.1.0"); e != nil {
 		t.Fatal(e)
 	}
 	sample(t, s, now.Add(50*time.Second), 210, 110, false, d)
@@ -84,7 +84,7 @@ func TestBeijingRolloverNoCrossMonth(t *testing.T) {
 	if v := s.Users["alice"]; v.Uplink != 10 || v.Downlink != 10 {
 		t.Fatal(v)
 	}
-	if e := s.Sample(now, nil, false, d, "v0.1.0"); e != ErrClock {
+	if _, e := s.Sample(now, nil, false, d, "v0.1.0"); e != ErrClock {
 		t.Fatalf("clock rollback: %v", e)
 	}
 }
@@ -186,7 +186,7 @@ func TestDurablePendingSequenceAndOverflow(t *testing.T) {
 		t.Fatal("sequence overflow")
 	}
 	s.Users["alice"] = Entry{Uplink: model.MaxSafe}
-	if e := s.Sample(now, map[string]xray.Counter{"alice@proxysetting": {Up: 1}}, false, d, "v0.1.0"); e != ErrState {
+	if _, e := s.Sample(now, map[string]xray.Counter{"alice@proxysetting": {Up: 1}}, false, d, "v0.1.0"); e != ErrState {
 		t.Fatal("counter overflow")
 	}
 }
