@@ -42,7 +42,14 @@ export async function adminRoutes(
         "SELECT id,name,address,port,server_name,revision,public_key,short_id,status,version,last_sync,error,revoked FROM vps ORDER BY created_at",
       ).all(),
       env.DB.prepare("SELECT * FROM identities ORDER BY name").all(),
-      env.DB.prepare("SELECT vps_id,identity_id,quota_bytes FROM grants").all(),
+      env.DB.prepare(
+        `SELECT g.vps_id, g.identity_id, g.quota_bytes,
+                COALESCE(r.reset_baseline_bytes, 0) as reset_baseline_bytes,
+                COALESCE(r.lifetime_used_bytes, 0) as lifetime_used_bytes,
+                r.reset_at
+         FROM grants g
+         LEFT JOIN grant_resets r ON r.vps_id=g.vps_id AND r.identity_id=g.identity_id`,
+      ).all(),
       env.DB.prepare("SELECT vps_id,payload,updated_at FROM snapshots").all(),
     ]);
     return json({
@@ -182,6 +189,79 @@ export async function adminRoutes(
     ]);
     return json({ ok: true });
   }
+  const irm = /^\/api\/admin\/identities\/([a-f0-9-]{36})\/reset$/.exec(path);
+  if (irm && request.method === "POST") {
+    const identityId = irm[1];
+    const identity = await env.DB.prepare("SELECT id FROM identities WHERE id=?")
+      .bind(identityId)
+      .first();
+    assert(identity, "Identity not found", 404);
+
+    let b: Record<string, unknown> = {};
+    if (request.body && Number(request.headers.get("Content-Length") || 0) > 0) {
+      try {
+        b = await body(request);
+      } catch {}
+    }
+
+    const vpsId = b?.vpsId !== undefined ? text(b.vpsId, "vpsId", 36) : null;
+    let targetGrants: Array<{ vps_id: string; quota_bytes: number; lifetime_used_bytes: number }>;
+    if (vpsId) {
+      targetGrants = (await env.DB.prepare(
+        `SELECT g.vps_id, g.quota_bytes, COALESCE(r.lifetime_used_bytes, 0) as lifetime_used_bytes
+         FROM grants g
+         LEFT JOIN grant_resets r ON r.vps_id=g.vps_id AND r.identity_id=g.identity_id
+         WHERE g.identity_id=? AND g.vps_id=?`
+      ).bind(identityId, vpsId).all<any>()).results;
+      assert(targetGrants.length > 0, "Grant not found for this node", 404);
+    } else {
+      targetGrants = (await env.DB.prepare(
+        `SELECT g.vps_id, g.quota_bytes, COALESCE(r.lifetime_used_bytes, 0) as lifetime_used_bytes
+         FROM grants g
+         LEFT JOIN grant_resets r ON r.vps_id=g.vps_id AND r.identity_id=g.identity_id
+         WHERE g.identity_id=?`
+      ).bind(identityId).all<any>()).results;
+      assert(targetGrants.length > 0, "No node grants found for this identity", 400);
+    }
+
+    const now = new Date().toISOString();
+    const batchQueries: D1PreparedStatement[] = [];
+
+    for (const g of targetGrants) {
+      const snapRow = await env.DB.prepare("SELECT payload FROM snapshots WHERE vps_id=?")
+        .bind(g.vps_id)
+        .first<{ payload: string }>();
+      let snapBytes = 0;
+      if (snapRow?.payload) {
+        try {
+          const snap = JSON.parse(snapRow.payload);
+          const u = snap.users?.find((x: any) => x.id === identityId);
+          if (u) snapBytes = (u.uplink || 0) + (u.downlink || 0);
+        } catch {}
+      }
+
+      const baseline = Math.max(g.lifetime_used_bytes, snapBytes);
+      batchQueries.push(
+        env.DB.prepare(
+          `INSERT INTO grant_resets(vps_id, identity_id, reset_baseline_bytes, lifetime_used_bytes, reset_at)
+           VALUES(?, ?, ?, ?, ?)
+           ON CONFLICT(vps_id, identity_id) DO UPDATE SET
+             reset_baseline_bytes=excluded.reset_baseline_bytes,
+             lifetime_used_bytes=MAX(grant_resets.lifetime_used_bytes, excluded.lifetime_used_bytes),
+             reset_at=excluded.reset_at`,
+        ).bind(g.vps_id, identityId, baseline, baseline, now),
+      );
+
+      batchQueries.push(
+        env.DB.prepare(
+          "UPDATE vps SET revision=revision+1,status=CASE WHEN status='ready' THEN 'syncing' ELSE status END WHERE id=?",
+        ).bind(g.vps_id),
+      );
+    }
+
+    await env.DB.batch(batchQueries);
+    return json({ ok: true, resetNodes: targetGrants.length });
+  }
   if (path === "/api/admin/usage" && request.method === "GET") {
     const period =
       new URL(request.url).searchParams.get("period") || calendar().month;
@@ -261,10 +341,14 @@ export async function adminRoutes(
         .bind(v.id, identityId)
         .first<Grant>();
       let operation: D1PreparedStatement;
+      let cleanupReset: D1PreparedStatement | null = null;
       if (request.method === "DELETE") {
         assert(existing, "Grant not found", 404);
         operation = env.DB.prepare(
           "DELETE FROM grants WHERE vps_id=? AND identity_id=?",
+        ).bind(v.id, identityId);
+        cleanupReset = env.DB.prepare(
+          "DELETE FROM grant_resets WHERE vps_id=? AND identity_id=?",
         ).bind(v.id, identityId);
       } else {
         assert(
@@ -286,12 +370,16 @@ export async function adminRoutes(
           "INSERT INTO grants(vps_id,identity_id,uuid_cipher,quota_bytes) VALUES(?,?,?,?) ON CONFLICT(vps_id,identity_id) DO UPDATE SET quota_bytes=excluded.quota_bytes",
         ).bind(v.id, identityId, cipher, bytes);
       }
-      await env.DB.batch([
+      const queriesToRun = [
         operation,
         env.DB.prepare(
           "UPDATE vps SET revision=revision+1,status=CASE WHEN status='ready' THEN 'syncing' ELSE status END WHERE id=?",
         ).bind(v.id),
-      ]);
+      ];
+      if (cleanupReset) {
+        queriesToRun.push(cleanupReset);
+      }
+      await env.DB.batch(queriesToRun);
       return json({ ok: true });
     }
     if (m[2] === "upgrade" && request.method === "POST") {

@@ -19,7 +19,8 @@ import {
   Shield,
   Activity,
   ArrowUpRight,
-  ArrowDownLeft
+  ArrowDownLeft,
+  RotateCcw
 } from '@lucide/vue'
 
 const props = defineProps<{
@@ -60,6 +61,11 @@ const removingGrant = ref(false)
 // Local editing inputs state: key is `${identityId}:${vpsId}` -> string of GiB
 const editQuotas = ref<Record<string, string>>({})
 const savingQuota = ref<Record<string, boolean>>({})
+
+// Reset Quota Modal State
+const showResetModal = ref(false)
+const pendingReset = ref<{ identityId: string; identityName: string; vpsId?: string; vpsName?: string } | null>(null)
+const resettingIdentity = ref<Record<string, boolean>>({})
 
 // Identity status toggle loading
 const togglingIdentity = ref<Record<string, boolean>>({})
@@ -118,6 +124,38 @@ function getUserUsageOnVps(vpsId: string, identityId: string) {
   const snapshot = props.state?.snapshots?.find((s: any) => s.vps_id === vpsId)?.payload
   if (!snapshot || snapshot.month !== props.state?.calendar?.month) return null
   return snapshot.users?.find((u: any) => u.id === identityId) || null
+}
+
+function getGrantUsage(vpsId: string, identityId: string) {
+  const grant = getGrant(vpsId, identityId)
+  if (!grant) return { used: 0, percent: 0, disabled: false, resetAt: null }
+
+  const raw = getUserUsageOnVps(vpsId, identityId)
+  const snapTotal = raw ? ((raw.uplink || 0) + (raw.downlink || 0)) : 0
+  const lifetime = Math.max(grant.lifetime_used_bytes || 0, snapTotal)
+  const baseline = grant.reset_baseline_bytes || 0
+  const used = Math.max(0, lifetime - baseline)
+  const quota = grant.quota_bytes || 1
+  const percent = Math.min(100, (used / quota) * 100)
+  const disabled = used >= quota || Boolean(raw?.disabled && used > 0)
+
+  return {
+    used,
+    percent,
+    disabled,
+    resetAt: grant.reset_at || null
+  }
+}
+
+function formatResetTime(isoStr: string | null | undefined): string | null {
+  if (!isoStr) return null
+  try {
+    const d = new Date(isoStr)
+    if (isNaN(d.getTime())) return null
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  } catch {
+    return null
+  }
 }
 
 function getUserTotalMonthUsage(identityId: string) {
@@ -193,6 +231,46 @@ async function saveQuota(vps: any, identity: any) {
     showToast(e.message || '保存额度失败', 'error')
   } finally {
     savingQuota.value[key] = false
+  }
+}
+
+function promptResetIdentity(identity: any) {
+  pendingReset.value = {
+    identityId: identity.id,
+    identityName: identity.name
+  }
+  showResetModal.value = true
+}
+
+function promptResetNode(vps: any, identity: any) {
+  pendingReset.value = {
+    identityId: identity.id,
+    identityName: identity.name,
+    vpsId: vps.id,
+    vpsName: vps.name
+  }
+  showResetModal.value = true
+}
+
+async function confirmReset() {
+  if (!pendingReset.value) return
+  const { identityId, identityName, vpsId, vpsName } = pendingReset.value
+  const key = vpsId ? `${identityId}:${vpsId}` : identityId
+  resettingIdentity.value[key] = true
+  try {
+    await api(`identities/${identityId}/reset`, 'POST', vpsId ? { vpsId } : {})
+    showToast(
+      vpsId
+        ? `已重置 “${identityName}” 在节点 “${vpsName}” 的额度`
+        : `已重置 “${identityName}” 的额度`,
+      'success'
+    )
+    showResetModal.value = false
+    emit('refresh')
+  } catch (e: any) {
+    showToast(e.message || '重置额度失败', 'error')
+  } finally {
+    resettingIdentity.value[key] = false
   }
 }
 
@@ -346,8 +424,18 @@ async function confirmRemoveGrant() {
             </div>
           </div>
 
-          <!-- Enable / Disable Switch & Toggle Collapse -->
+          <!-- Enable / Disable Switch, Reset Quota & Toggle Collapse -->
           <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              @click.stop="promptResetIdentity(identity)"
+              :disabled="resettingIdentity[identity.id]"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all cursor-pointer disabled:opacity-50"
+              title="重置该身份在各节点的已用额度（不影响流量统计）"
+            >
+              <RotateCcw class="w-3.5 h-3.5" :class="{ 'animate-spin': resettingIdentity[identity.id] }" />
+              <span>{{ resettingIdentity[identity.id] ? '重置中...' : '重置额度' }}</span>
+            </button>
+
             <button
               @click="toggleIdentity(identity)"
               :disabled="togglingIdentity[identity.id]"
@@ -437,30 +525,26 @@ async function confirmRemoveGrant() {
               <div v-if="getGrant(vps.id, identity.id)" class="space-y-1.5 bg-white dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800">
                 <div class="flex items-center justify-between text-xs">
                   <span class="text-slate-500 dark:text-slate-400">
-                    本月消耗:
+                    已用额度:
                     <b class="text-slate-800 dark:text-slate-200">
-                      {{ formatBytes((getUserUsageOnVps(vps.id, identity.id)?.uplink || 0) + (getUserUsageOnVps(vps.id, identity.id)?.downlink || 0)) }}
+                      {{ formatBytes(getGrantUsage(vps.id, identity.id).used) }}
                     </b>
+                    <span v-if="getGrantUsage(vps.id, identity.id).resetAt" class="text-[10px] text-slate-400 ml-1.5 font-normal">
+                      (自 {{ formatResetTime(getGrantUsage(vps.id, identity.id).resetAt) }})
+                    </span>
                   </span>
                   <span
                     class="font-semibold text-xs"
                     :class="[
-                      getUserUsageOnVps(vps.id, identity.id)?.disabled
+                      getGrantUsage(vps.id, identity.id).disabled
                         ? 'text-rose-600 dark:text-rose-400 font-bold'
                         : 'text-slate-600 dark:text-slate-300'
                     ]"
                   >
                     {{
-                      getUserUsageOnVps(vps.id, identity.id)?.disabled
+                      getGrantUsage(vps.id, identity.id).disabled
                         ? '已熔断/额度耗尽'
-                        : `${(
-                            Math.min(
-                              100,
-                              (((getUserUsageOnVps(vps.id, identity.id)?.uplink || 0) + (getUserUsageOnVps(vps.id, identity.id)?.downlink || 0)) /
-                                getGrant(vps.id, identity.id).quota_bytes) *
-                                100
-                            ) || 0
-                          ).toFixed(1)}%`
+                        : `${getGrantUsage(vps.id, identity.id).percent.toFixed(1)}%`
                     }}
                   </span>
                 </div>
@@ -470,18 +554,12 @@ async function confirmRemoveGrant() {
                   <div
                     class="h-full rounded-full transition-all duration-300"
                     :style="{
-                      width: `${Math.min(
-                        100,
-                        (((getUserUsageOnVps(vps.id, identity.id)?.uplink || 0) + (getUserUsageOnVps(vps.id, identity.id)?.downlink || 0)) /
-                          getGrant(vps.id, identity.id).quota_bytes) *
-                          100
-                      )}%`
+                      width: `${getGrantUsage(vps.id, identity.id).percent}%`
                     }"
                     :class="[
-                      getUserUsageOnVps(vps.id, identity.id)?.disabled
+                      getGrantUsage(vps.id, identity.id).disabled
                         ? 'bg-rose-500'
-                        : (((getUserUsageOnVps(vps.id, identity.id)?.uplink || 0) + (getUserUsageOnVps(vps.id, identity.id)?.downlink || 0)) /
-                            getGrant(vps.id, identity.id).quota_bytes) > 0.85
+                        : getGrantUsage(vps.id, identity.id).percent > 85
                         ? 'bg-amber-500'
                         : 'bg-blue-600 dark:bg-blue-500'
                     ]"
@@ -528,6 +606,16 @@ async function confirmRemoveGrant() {
                   >
                     <Save class="w-3.5 h-3.5" />
                     <span>{{ savingQuota[`${identity.id}:${vps.id}`] ? '保存中' : '保存' }}</span>
+                  </button>
+
+                  <button
+                    v-if="getGrant(vps.id, identity.id)"
+                    @click="promptResetNode(vps, identity)"
+                    :disabled="resettingIdentity[`${identity.id}:${vps.id}`]"
+                    title="重置此节点的已用额度"
+                    class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-transparent hover:border-blue-200 dark:hover:border-blue-900/50 transition-colors cursor-pointer shrink-0"
+                  >
+                    <RotateCcw class="w-3.5 h-3.5" :class="{ 'animate-spin': resettingIdentity[`${identity.id}:${vps.id}`] }" />
                   </button>
 
                   <button
@@ -597,6 +685,21 @@ async function confirmRemoveGrant() {
         </div>
       </form>
     </Modal>
+
+    <!-- Confirm Reset Quota Modal -->
+    <ConfirmModal
+      v-model="showResetModal"
+      title="重置身份额度"
+      :message="
+        pendingReset?.vpsId
+          ? `确定要重置 “${pendingReset.identityName}” 在节点 “${pendingReset.vpsName}” 的已用额度吗？已用额度将从 0 重新开始累计并解除熔断，流量统计数据不会受到影响。`
+          : `确定要重置 “${pendingReset?.identityName}” 的额度吗？此操作将重置该身份在所有 VPS 节点的已用额度并解除熔断，流量统计数据不会受到影响。`
+      "
+      confirm-text="确认重置"
+      :is-destructive="false"
+      :loading="Boolean(pendingReset && (resettingIdentity[pendingReset.vpsId ? `${pendingReset.identityId}:${pendingReset.vpsId}` : pendingReset.identityId]))"
+      @confirm="confirmReset"
+    />
 
     <!-- Confirm Remove Grant Modal -->
     <ConfirmModal

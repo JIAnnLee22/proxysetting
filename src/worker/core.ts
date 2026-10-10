@@ -198,10 +198,17 @@ export async function desired(env: Env, vps: VPS): Promise<DesiredConfig> {
     .first<{ payload: string }>();
   const usage = recorded ? JSON.parse(recorded.payload) : null;
   const grants = await env.DB.prepare(
-    "SELECT g.* FROM grants g JOIN identities i ON i.id=g.identity_id WHERE g.vps_id=? AND i.enabled=1 ORDER BY g.identity_id",
+    `SELECT g.*,
+            COALESCE(r.reset_baseline_bytes, 0) as reset_baseline_bytes,
+            COALESCE(r.lifetime_used_bytes, 0) as lifetime_used_bytes
+     FROM grants g
+     JOIN identities i ON i.id=g.identity_id
+     LEFT JOIN grant_resets r ON r.vps_id=g.vps_id AND r.identity_id=g.identity_id
+     WHERE g.vps_id=? AND i.enabled=1
+     ORDER BY g.identity_id`,
   )
     .bind(vps.id)
-    .all<Grant>();
+    .all<Grant & { reset_baseline_bytes: number; lifetime_used_bytes: number }>();
   return {
     schema: 1,
     vpsId: vps.id,
@@ -209,12 +216,26 @@ export async function desired(env: Env, vps: VPS): Promise<DesiredConfig> {
     port: vps.port,
     serverName: vps.server_name,
     users: await Promise.all(
-      grants.results.map(async (g) => ({
-        id: g.identity_id,
-        email: `${g.identity_id}@proxysetting`,
-        uuid: await decrypt(env, g.uuid_cipher, `${vps.id}:${g.identity_id}`),
-        quotaBytes: g.quota_bytes,
-      })),
+      grants.results.map(async (g) => {
+        const nominalQuota = g.quota_bytes;
+        const agentUser = usage?.users?.find((u: any) => u.id === g.identity_id);
+        const currentAgentTraffic = agentUser ? (agentUser.uplink + agentUser.downlink) : 0;
+        const lifetime = Math.max(g.lifetime_used_bytes || 0, currentAgentTraffic);
+        const baseline = g.reset_baseline_bytes || 0;
+        const used = Math.max(0, lifetime - baseline);
+        const remaining = Math.max(0, nominalQuota - used);
+
+        let quotaBytes = remaining === 0
+          ? Math.max(1, currentAgentTraffic)
+          : Math.min(109951162777600, currentAgentTraffic + remaining);
+
+        return {
+          id: g.identity_id,
+          email: `${g.identity_id}@proxysetting`,
+          uuid: await decrypt(env, g.uuid_cipher, `${vps.id}:${g.identity_id}`),
+          quotaBytes,
+        };
+      }),
     ),
     upgrade: vps.upgrade_json ? JSON.parse(vps.upgrade_json) : null,
     ...(usage ? { usage: { month: usage.month, users: usage.users } } : {}),

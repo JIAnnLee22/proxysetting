@@ -36,6 +36,9 @@ export interface Grant {
   identity_id: string;
   uuid_cipher: string;
   quota_bytes: number;
+  reset_baseline_bytes?: number;
+  lifetime_used_bytes?: number;
+  reset_at?: string | null;
 }
 export interface DesiredConfig {
   schema: 1;

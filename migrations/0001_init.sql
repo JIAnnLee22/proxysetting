@@ -26,3 +26,9 @@ CREATE INDEX grants_identity ON grants(identity_id);
 CREATE INDEX usage_period ON usage_periods(period);
 CREATE INDEX enrollment_expiry ON vps(enrollment_expires);
 CREATE UNIQUE INDEX IF NOT EXISTS vps_name ON vps(name);
+CREATE TABLE IF NOT EXISTS grant_resets (
+ vps_id TEXT NOT NULL REFERENCES vps(id), identity_id TEXT NOT NULL REFERENCES identities(id),
+ reset_baseline_bytes INTEGER NOT NULL DEFAULT 0, lifetime_used_bytes INTEGER NOT NULL DEFAULT 0,
+ reset_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ PRIMARY KEY (vps_id, identity_id)
+);

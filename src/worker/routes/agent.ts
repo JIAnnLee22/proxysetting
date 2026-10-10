@@ -265,6 +265,14 @@ export async function agentRoutes(
     const monthPayload = payload; // includes the full snapshot
     const dayPayload = payload;   // includes the full snapshot and optional daily
     
+    let beforeUsers: Array<{ id: string; uplink: number; downlink: number }> = [];
+    if (old) {
+      try {
+        const before = JSON.parse(old.payload) as Snapshot;
+        beforeUsers = before.users || [];
+      } catch {}
+    }
+
     const queries = [
       env.DB.prepare(
         "INSERT INTO snapshots(vps_id,sequence,month,day,payload,updated_at) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM vps WHERE id=? AND revoked=0 AND credential_hash=?) ON CONFLICT(vps_id) DO UPDATE SET sequence=excluded.sequence,month=excluded.month,day=excluded.day,payload=excluded.payload,updated_at=excluded.updated_at WHERE excluded.sequence>sequence",
@@ -279,6 +287,32 @@ export async function agentRoutes(
         "INSERT INTO usage_periods(vps_id,period,payload,updated_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?) ON CONFLICT(vps_id,period) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at",
       ).bind(v.id, s.day, dayPayload, now, v.id, s.sequence),
     ];
+
+    for (const u of s.users) {
+      let delta = 0;
+      if (old && old.month === s.month) {
+        const last = beforeUsers.find((x) => x.id === u.id);
+        const lastTotal = last ? (last.uplink + last.downlink) : 0;
+        const currentTotal = u.uplink + u.downlink;
+        if (currentTotal > lastTotal) {
+          delta = currentTotal - lastTotal;
+        }
+      } else {
+        delta = u.uplink + u.downlink;
+      }
+
+      if (delta > 0) {
+        queries.push(
+          env.DB.prepare(
+            `INSERT INTO grant_resets(vps_id, identity_id, reset_baseline_bytes, lifetime_used_bytes, reset_at)
+             SELECT ?, ?, 0, ?, ?
+             WHERE EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?)
+             ON CONFLICT(vps_id, identity_id) DO UPDATE SET
+             lifetime_used_bytes = lifetime_used_bytes + excluded.lifetime_used_bytes`
+          ).bind(v.id, u.id, delta, now, v.id, s.sequence)
+        );
+      }
+    }
 
     if (s.archive) {
       let archPayload: string;
