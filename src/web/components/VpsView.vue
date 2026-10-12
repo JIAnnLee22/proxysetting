@@ -17,6 +17,7 @@ import {
   Check,
   Clock,
   ShieldCheck,
+  ShieldOff,
   AlertTriangle,
   ExternalLink,
   Cpu,
@@ -76,6 +77,11 @@ const upgradeVersion = ref('v0.1.1')
 const showRevokeModal = ref(false)
 const revoking = ref(false)
 const revokeTarget = ref<{ id: string; name: string } | null>(null)
+
+// Delete Confirm Modal
+const showDeleteModal = ref(false)
+const deleting = ref(false)
+const deleteTarget = ref<{ id: string; name: string } | null>(null)
 
 // Nodes stats
 const summary = computed(() => {
@@ -302,6 +308,27 @@ async function confirmRevoke() {
     revoking.value = false
   }
 }
+
+// Permanently delete VPS
+function promptDelete(vps: any) {
+  deleteTarget.value = { id: vps.id, name: vps.name }
+  showDeleteModal.value = true
+}
+
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await api(`vps/${deleteTarget.value.id}`, 'DELETE')
+    showToast(`已彻底删除节点 “${deleteTarget.value.name}”`, 'success')
+    showDeleteModal.value = false
+    emit('refresh')
+  } catch (e: any) {
+    showToast(e.message || '彻底删除节点失败', 'error')
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -340,7 +367,7 @@ async function confirmRevoke() {
 
       <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center gap-3.5">
         <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center shrink-0">
-          <Trash2 class="w-5 h-5" />
+          <ShieldOff class="w-5 h-5" />
         </div>
         <div>
           <div class="text-xs font-medium text-slate-500 dark:text-slate-400">已撤销凭据</div>
@@ -511,8 +538,18 @@ async function confirmRevoke() {
               @click="promptRevoke(v)"
               class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors cursor-pointer"
             >
-              <Trash2 class="w-3.5 h-3.5" />
+              <ShieldOff class="w-3.5 h-3.5" />
               <span>撤销凭据</span>
+            </button>
+
+            <!-- Permanently Delete -->
+            <button
+              v-if="v.revoked || v.status === 'revoked'"
+              @click="promptDelete(v)"
+              class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors cursor-pointer"
+            >
+              <Trash2 class="w-3.5 h-3.5" />
+              <span>彻底删除</span>
             </button>
           </div>
 
@@ -806,6 +843,17 @@ async function confirmRevoke() {
       :is-destructive="true"
       :loading="revoking"
       @confirm="confirmRevoke"
+    />
+
+    <!-- Delete Confirm Modal -->
+    <ConfirmModal
+      v-model="showDeleteModal"
+      title="彻底删除节点"
+      :message="`确定要彻底删除节点 “${deleteTarget?.name}” 吗？此操作不可逆，将永久删除该节点的所有配置、授权分配以及历史流量记录，并释放节点数量配额。`"
+      confirm-text="确认彻底删除"
+      :is-destructive="true"
+      :loading="deleting"
+      @confirm="confirmDelete"
     />
   </div>
 </template>

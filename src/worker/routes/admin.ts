@@ -158,6 +158,25 @@ export async function adminRoutes(
       .run();
     return json({ ok: true });
   }
+  if (vm && request.method === "DELETE") {
+    const vps = await env.DB.prepare("SELECT * FROM vps WHERE id=?")
+      .bind(vm[1])
+      .first<VPS>();
+    assert(vps, "VPS not found", 404);
+    assert(
+      vps.revoked === 1 || vps.status === "revoked",
+      "Only revoked VPS can be deleted",
+      409,
+    );
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM grants WHERE vps_id=?").bind(vm[1]),
+      env.DB.prepare("DELETE FROM grant_resets WHERE vps_id=?").bind(vm[1]),
+      env.DB.prepare("DELETE FROM snapshots WHERE vps_id=?").bind(vm[1]),
+      env.DB.prepare("DELETE FROM usage_periods WHERE vps_id=?").bind(vm[1]),
+      env.DB.prepare("DELETE FROM vps WHERE id=?").bind(vm[1]),
+    ]);
+    return json({ ok: true });
+  }
   if (path === "/api/admin/identities" && request.method === "POST") {
     const b = await body(request);
     const id = crypto.randomUUID();
