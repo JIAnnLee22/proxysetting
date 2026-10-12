@@ -1,5 +1,25 @@
 import { assert, decrypt } from "./core";
 import type { Env, Grant, Identity, VPS } from "./types";
+
+export interface VergeNode {
+  name: string;
+  type: string;
+  server: string;
+  port: number;
+  uuid: string;
+  flow?: string;
+  tls?: boolean;
+  servername?: string;
+  "client-fingerprint"?: string;
+  "reality-opts"?: {
+    "public-key": string;
+    "short-id": string;
+  };
+  network?: string;
+  udp?: boolean;
+  [key: string]: unknown;
+}
+
 export function vergeScript(nodes: Record<string, unknown>[]) {
   const serialized = JSON.stringify(nodes)
     .replaceAll("<", "\\u003c")
@@ -7,7 +27,214 @@ export function vergeScript(nodes: Record<string, unknown>[]) {
     .replaceAll("\u2029", "\\u2029");
   return `// Sensitive: contains one identity's credentials. Do not share.\nfunction main(config) {\n  const nodes = ${serialized};\n  const owner = 'proxysetting:v1';\n  const groupName = '自建节点';\n  if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('proxysetting: config must be an object');\n  if (config.proxies !== undefined && !Array.isArray(config.proxies)) throw new Error('proxysetting: proxies must be an array');\n  if (config['proxy-groups'] !== undefined && !Array.isArray(config['proxy-groups'])) throw new Error('proxysetting: proxy-groups must be an array');\n  const proxies = config.proxies || [];\n  const groups = config['proxy-groups'] || [];\n  for (const node of nodes) {\n    if (groups.some(g => g.name === node.name)) throw new Error('proxysetting: node/group name conflict: ' + node.name);\n    const found = proxies.filter(p => p.name === node.name);\n    if (found.some(p => p['x-proxysetting-owner'] !== owner)) throw new Error('proxysetting: node name conflict: ' + node.name);\n  }\n  if (proxies.some(p => p.name === groupName)) throw new Error('proxysetting: group/proxy name conflict: ' + groupName);\n  const found = groups.filter(g => g.name === groupName);\n  if (found.some(g => g['x-proxysetting-owner'] !== owner || g.type !== 'select')) throw new Error('proxysetting: group name conflict: ' + groupName);\n  const result = { ...config };\n  // Only our explicitly marked entries are replaced; user entries are never overwritten.\n  result.proxies = proxies.filter(p => p['x-proxysetting-owner'] !== owner).concat(nodes.map(n => ({ ...n, 'x-proxysetting-owner': owner })));\n  result['proxy-groups'] = groups.filter(g => g.name !== groupName).map(g => {\n    if (g.type !== 'select') return g;\n    if (g.proxies !== undefined && !Array.isArray(g.proxies)) throw new Error('proxysetting: invalid select proxies: ' + g.name);\n    let included = false;\n    const members = (g.proxies || []).filter(n => { if (n !== groupName) return true; if (included) return false; included = true; return true; });\n    if (!included) members.push(groupName);\n    return { ...g, proxies: members };\n  }).concat([{ name: groupName, type: 'select', proxies: nodes.map(n => n.name), 'x-proxysetting-owner': owner }]);\n  return result;\n}\n`;
 }
-export async function exportVerge(env: Env, identityId: string) {
+
+function dumpNodeYaml(node: VergeNode): string {
+  const lines: string[] = [
+    `  - name: ${JSON.stringify(node.name)}`,
+    `    type: ${node.type || "vless"}`,
+    `    server: ${JSON.stringify(node.server)}`,
+    `    port: ${node.port}`,
+    `    uuid: ${JSON.stringify(node.uuid)}`,
+  ];
+  if (node.flow) {
+    lines.push(`    flow: ${node.flow}`);
+  }
+  if (node.tls !== undefined) {
+    lines.push(`    tls: ${node.tls}`);
+  }
+  if (node.servername) {
+    lines.push(`    servername: ${JSON.stringify(node.servername)}`);
+  }
+  if (node["client-fingerprint"]) {
+    lines.push(`    client-fingerprint: ${node["client-fingerprint"]}`);
+  }
+  if (node["reality-opts"]) {
+    lines.push(`    reality-opts:`);
+    lines.push(`      public-key: ${JSON.stringify(node["reality-opts"]["public-key"])}`);
+    lines.push(`      short-id: ${JSON.stringify(node["reality-opts"]["short-id"])}`);
+  }
+  if (node.network) {
+    lines.push(`    network: ${node.network}`);
+  }
+  if (node.udp !== undefined) {
+    lines.push(`    udp: ${node.udp}`);
+  }
+  return lines.join("\n");
+}
+
+export function clashConfig(nodes: VergeNode[]): string {
+  let proxiesYaml = "proxies: []";
+  let groupProxiesYaml = "      - DIRECT\n      - REJECT";
+
+  if (nodes.length > 0) {
+    proxiesYaml = "proxies:\n" + nodes.map(dumpNodeYaml).join("\n");
+    groupProxiesYaml = nodes
+      .map((n) => `      - ${JSON.stringify(n.name)}`)
+      .concat(["      - DIRECT", "      - REJECT"])
+      .join("\n");
+  }
+
+  return `# Clash Verge Rev / Mihomo 本地完整配置
+# 分流：局域网直连、常见国内站点直连、中国 IP 直连、其余走“代理选择”。
+# 当前不包含节点；未添加节点时“代理选择”只有 DIRECT，所有流量实际直连。
+# 不会自动复用另一个订阅配置里的节点。
+# 使用方法：保存为 .yaml，导入本地配置并启用，打开系统代理，模式选“规则”。
+# 加入节点有两种方式：
+# 1. 将下方 proxies: [] 替换为你的 Clash/Mihomo 节点列表。
+# 2. 取消文件末尾 proxy-providers 示例的注释，并填入 Clash 格式订阅链接。
+# 添加节点后，在“代理选择”中选择一个真实节点；DIRECT 表示直连。
+# Clash Verge 的端口、DNS 等设置可能覆写本文件对应设置。
+
+mixed-port: 7890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+ipv6: false
+
+profile:
+  store-selected: true
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: redir-host
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+      - 240.0.0.0/4
+
+${proxiesYaml}
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    include-all: false
+    proxies:
+${groupProxiesYaml}
+rule-providers:
+  reject:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt"
+    path: ./ruleset/reject.yaml
+    interval: 86400
+
+  icloud:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/icloud.txt"
+    path: ./ruleset/icloud.yaml
+    interval: 86400
+
+  apple:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt"
+    path: ./ruleset/apple.yaml
+    interval: 86400
+
+  google:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/google.txt"
+    path: ./ruleset/google.yaml
+    interval: 86400
+
+  proxy:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/proxy.txt"
+    path: ./ruleset/proxy.yaml
+    interval: 86400
+
+  direct:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt"
+    path: ./ruleset/direct.yaml
+    interval: 86400
+
+  private:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt"
+    path: ./ruleset/private.yaml
+    interval: 86400
+
+  gfw:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt"
+    path: ./ruleset/gfw.yaml
+    interval: 86400
+
+  tld-not-cn:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/tld-not-cn.txt"
+    path: ./ruleset/tld-not-cn.yaml
+    interval: 86400
+
+  telegramcidr:
+    type: http
+    behavior: ipcidr
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/telegramcidr.txt"
+    path: ./ruleset/telegramcidr.yaml
+    interval: 86400
+
+  cncidr:
+    type: http
+    behavior: ipcidr
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt"
+    path: ./ruleset/cncidr.yaml
+    interval: 86400
+
+  lancidr:
+    type: http
+    behavior: ipcidr
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt"
+    path: ./ruleset/lancidr.yaml
+    interval: 86400
+
+  applications:
+    type: http
+    behavior: classical
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/applications.txt"
+    path: ./ruleset/applications.yaml
+    interval: 86400
+
+rules:
+  - RULE-SET,applications,DIRECT
+  - DOMAIN,clash.razord.top,DIRECT
+  - DOMAIN,yacd.haishan.me,DIRECT
+  - RULE-SET,private,DIRECT
+  - RULE-SET,reject,REJECT
+  - RULE-SET,icloud,DIRECT
+  - RULE-SET,apple,DIRECT
+  - RULE-SET,google,PROXY
+  - RULE-SET,proxy,PROXY
+  - RULE-SET,direct,DIRECT
+  - RULE-SET,lancidr,DIRECT
+  - RULE-SET,cncidr,DIRECT
+  - RULE-SET,telegramcidr,PROXY
+  - GEOIP,LAN,DIRECT
+  - GEOIP,CN,DIRECT
+  - MATCH,PROXY
+`;
+}
+
+export async function getIdentityNodes(env: Env, identityId: string): Promise<VergeNode[]> {
   const i = await env.DB.prepare(
     "SELECT * FROM identities WHERE id=? AND enabled=1",
   )
@@ -21,7 +248,7 @@ export async function exportVerge(env: Env, identityId: string) {
   )
     .bind(identityId)
     .all<Grant>();
-  const nodes = [];
+  const nodes: VergeNode[] = [];
   const invalidReasons: string[] = [];
   for (const v of all.results) {
     if (
@@ -68,5 +295,15 @@ export async function exportVerge(env: Env, identityId: string) {
     invalidReasons[0] || "No ready VPS available",
     409,
   );
+  return nodes;
+}
+
+export async function exportVerge(env: Env, identityId: string) {
+  const nodes = await getIdentityNodes(env, identityId);
   return vergeScript(nodes);
+}
+
+export async function exportClash(env: Env, identityId: string) {
+  const nodes = await getIdentityNodes(env, identityId);
+  return clashConfig(nodes);
 }

@@ -39,13 +39,12 @@ const showHistoryModal = ref(false)
 const showLoginModal = ref(false)
 
 // Tabs definition based on auth status:
-// Guests only see Overview (流量监控) and Export (订阅导出)
+// Guests only see Overview (流量监控)
 // Admins see all 4 tabs (Overview, Identities & Quotas, VPS Nodes, Export)
 const tabs = computed(() => {
   if (!isAdmin.value) {
     return [
-      { id: 'overview', label: '总览监控', icon: Activity },
-      { id: 'export', label: '订阅导出', icon: FileCode }
+      { id: 'overview', label: '总览监控', icon: Activity }
     ]
   }
 
@@ -137,7 +136,7 @@ function handleSelectTab(id: string) {
 function handleLogout() {
   clearAdminAuth()
   showToast('已退出管理员模式，切回访客控制台', 'info')
-  if (['identities', 'vps'].includes(currentTab.value)) {
+  if (['identities', 'vps', 'export'].includes(currentTab.value)) {
     handleSelectTab('overview')
   }
   refreshAll()
@@ -145,7 +144,7 @@ function handleLogout() {
 
 // Watch admin status change
 watch(isAdmin, (val) => {
-  if (!val && ['identities', 'vps'].includes(currentTab.value)) {
+  if (!val && ['identities', 'vps', 'export'].includes(currentTab.value)) {
     handleSelectTab('overview')
   }
 })
@@ -159,7 +158,7 @@ onMounted(() => {
   const hash = window.location.hash.slice(1)
   if (['overview', 'identities', 'vps', 'export'].includes(hash)) {
     // If not admin and requested admin tab, fallback to overview
-    if (!isAdmin.value && ['identities', 'vps'].includes(hash)) {
+    if (!isAdmin.value && ['identities', 'vps', 'export'].includes(hash)) {
       currentTab.value = 'overview'
     } else {
       currentTab.value = hash
@@ -169,7 +168,7 @@ onMounted(() => {
   window.addEventListener('hashchange', () => {
     const newHash = window.location.hash.slice(1)
     if (['overview', 'identities', 'vps', 'export'].includes(newHash)) {
-      if (!isAdmin.value && ['identities', 'vps'].includes(newHash)) {
+      if (!isAdmin.value && ['identities', 'vps', 'export'].includes(newHash)) {
         currentTab.value = 'overview'
       } else {
         currentTab.value = newHash
@@ -255,9 +254,9 @@ onMounted(() => {
           @refresh="refreshAll"
         />
 
-        <!-- Tab: Export Verge Script (订阅导出 - 公开) -->
+        <!-- Tab: Export (订阅导出 - 仅管理员) -->
         <ExportView
-          v-else-if="currentTab === 'export'"
+          v-else-if="currentTab === 'export' && isAdmin"
           :state="state"
         />
       </div>

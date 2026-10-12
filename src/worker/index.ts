@@ -3,6 +3,7 @@ import { assert, HttpError, json } from "./core";
 import { adminRoutes } from "./routes/admin";
 import { agentRoutes } from "./routes/agent";
 import { analyticsRoutes } from "./routes/analytics";
+import { subRoutes } from "./routes/sub";
 import type { Env } from "./types";
 
 export default {
@@ -13,13 +14,15 @@ export default {
       const path = new URL(request.url).pathname;
       if (path.startsWith("/api/agent/")) {
         response = await agentRoutes(request, env);
+      } else if (path === "/api/sub" || path.startsWith("/api/sub/")) {
+        response = await subRoutes(request, env);
       } else {
         if (request.headers.has("Authorization")) {
           await checkAdminStatus(request, env);
         }
         if (path === "/api/admin/analytics") {
           response = await analyticsRoutes(request, env);
-        } else if (path === "/api/admin/export" || path === "/api/admin/state") {
+        } else if (path === "/api/admin/state") {
           response = await adminRoutes(request, env);
         } else if (path.startsWith("/api/admin/")) {
           await adminAuth(request, env);

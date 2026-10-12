@@ -12,7 +12,7 @@ import {
   token,
   hash,
 } from "../core";
-import { exportVerge } from "../export-verge";
+import { exportVerge, exportClash } from "../export-verge";
 import { checkAdminStatus, adminAuth } from "../auth";
 import type { Env, Grant, Identity, VPS } from "../types";
 function release(env: Env, version = env.RELEASE_VERSION) {
@@ -301,7 +301,18 @@ export async function adminRoutes(
   }
   if (path === "/api/admin/export" && request.method === "GET") {
     const id = new URL(request.url).searchParams.get("identity");
+    const format = new URL(request.url).searchParams.get("format");
     assert(id, "identity required");
+    if (format === "clash" || format === "yaml") {
+      const yaml = await exportClash(env, id);
+      return new Response(yaml, {
+        headers: {
+          "Content-Type": "text/yaml; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Content-Disposition": 'attachment; filename="clash-verge.yaml"',
+        },
+      });
+    }
     const script = await exportVerge(env, id);
     return new Response(script, {
       headers: {
