@@ -17,6 +17,7 @@ import (
 	"proxysetting/agent/internal/install"
 	"proxysetting/agent/internal/model"
 	"proxysetting/agent/internal/notify"
+	"proxysetting/agent/internal/service"
 	"proxysetting/agent/internal/state"
 	"proxysetting/agent/internal/upgrade"
 	"proxysetting/agent/internal/usage"
@@ -25,9 +26,13 @@ import (
 
 // Set by release CI: -ldflags="-X main.version=vX.Y.Z".
 var version = "v0.1.1"
-var errCLI = errors.New("usage: proxysetting-agent install|run|check|rotate --root ROOT")
+var errCLI = errors.New("usage: proxysetting-agent install|run|check|rotate|start|stop|restart|status|supervise --root ROOT")
 
 func execute(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) == 1 && args[0] == "--capabilities" {
+		fmt.Fprintln(out, "systemd standalone")
+		return nil
+	}
 	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
 		fmt.Fprintln(out, version)
 		return nil
@@ -36,12 +41,16 @@ func execute(ctx context.Context, args []string, out io.Writer) error {
 		return errCLI
 	}
 	command := args[0]
-	if command != "install" && command != "run" && command != "check" && command != "rotate" {
+	if command != "install" && command != "run" && command != "check" && command != "rotate" && command != "start" && command != "stop" && command != "restart" && command != "status" && command != "supervise" {
 		return errCLI
 	}
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // flags may contain a one-use token
-	root := fs.String("root", "/opt/proxysetting", "installation root")
+	root := fs.String("root", service.DefaultRoot(), "installation root")
+	var supervised bool
+	if command == "run" {
+		fs.BoolVar(&supervised, "supervised", false, "internal: child of standalone supervisor")
+	}
 	var url, token, address, name *string
 	var port *int
 	if command == "install" {
@@ -69,8 +78,39 @@ func execute(ctx context.Context, args []string, out io.Writer) error {
 		if e = install.Install(ctx, install.Options{Root: r, ControlURL: *url, Token: t, Address: *address, Port: *port, ServerName: *name, Version: version}, install.Hooks{}); e != nil {
 			return e
 		}
-		fmt.Fprintln(out, "installed; configuration and billing state saved; start systemd services")
+		fmt.Fprintln(out, "installed; configuration and billing state saved; start managed services")
 		return nil
+	}
+	mode, e := service.Mode(r)
+	if e != nil {
+		return e
+	}
+	if command == "start" || command == "stop" || command == "restart" || command == "status" || command == "supervise" {
+		if mode != "standalone" {
+			return errCLI // System installations must be managed through systemctl.
+		}
+		switch command {
+		case "start":
+			return service.Start(r)
+		case "stop":
+			return service.Stop(r)
+		case "restart":
+			if e = service.Stop(r); e != nil {
+				return e
+			}
+			return service.Start(r)
+		case "supervise":
+			return service.Supervise(ctx, r)
+		case "status":
+			if e = service.Status(r); e != nil {
+				return e
+			}
+			fmt.Fprintln(out, "standalone supervisor PID="+service.PID(r))
+			return execute(ctx, []string{"check", "--root", r}, out)
+		}
+	}
+	if command == "run" && (supervised != (mode == "standalone") || supervised && os.Getenv("NOTIFY_SOCKET") == "") {
+		return errCLI // Never run an unguarded standalone agent/Xray pair.
 	}
 	var lock *os.File
 	if command == "run" || command == "rotate" {
@@ -108,8 +148,14 @@ func execute(ctx context.Context, args []string, out io.Writer) error {
 		// Corrupt/missing files must not leave an independently started Xray running.
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = execStop(c)
+		if !supervised {
+			_ = execStop(c)
+		}
 		return e
+	}
+	if supervised {
+		// The supervisor observes exit and owns shutdown of its Xray child.
+		d.StopXray = func(context.Context) error { return nil }
 	}
 	return d.Run(ctx)
 }
@@ -120,7 +166,7 @@ func execStop(ctx context.Context) error {
 	return nil
 }
 func safeError(err error) string {
-	for _, e := range []error{errCLI, model.ErrConfig, state.ErrIO, state.ErrLocked, install.ErrInstall, install.ErrTLS, install.ErrPort, control.ErrAuth, control.ErrNetwork, control.ErrProtocol, control.ErrRejected, daemon.ErrLocal, daemon.ErrHealth, usage.ErrState, usage.ErrClock, xray.ErrAPI, notify.ErrNotify, upgrade.ErrUpgrade} {
+	for _, e := range []error{errCLI, model.ErrConfig, state.ErrIO, state.ErrLocked, install.ErrInstall, install.ErrTLS, install.ErrPort, control.ErrAuth, control.ErrNetwork, control.ErrProtocol, control.ErrRejected, daemon.ErrLocal, daemon.ErrHealth, usage.ErrState, usage.ErrClock, xray.ErrAPI, notify.ErrNotify, upgrade.ErrUpgrade, service.ErrService} {
 		if errors.Is(err, e) {
 			return e.Error()
 		}

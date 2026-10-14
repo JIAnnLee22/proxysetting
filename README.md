@@ -1,5 +1,5 @@
 # Proxysetting
-Cloudflare 免费版 Worker + D1 管理 1–10 台 Debian/Ubuntu/Arch Linux Xray VLESS/Reality VPS、1–50 个独立用户/设备。每台 VPS 独立月额度，上下行合计；北京时间月初恢复。无配额不开通，本地采样失效停止 Xray，Cloudflare 离线继续执行缓存额度。
+Cloudflare 免费版 Worker + D1 管理 1–10 台 Debian/Ubuntu/Arch Linux Xray VLESS/Reality VPS、1–50 个独立用户/设备。支持无root、无systemd节点：root且systemd可用时自动使用systemd，否则使用内置独立监管；普通账户安装到 `~/.local/share/proxysetting`，建议Reality端口8443。每台 VPS 独立月额度，上下行合计；北京时间月初恢复。无配额不开通，本地采样失效停止 Xray，Cloudflare 离线继续执行缓存额度。
 
 > 限额仅阻止新连接，已有连接可以继续；采样/重启存在计量误差，不是计费级硬限额。导出脚本包含用户 UUID，禁止分享。
 

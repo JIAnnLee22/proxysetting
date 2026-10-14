@@ -611,7 +611,7 @@ async function confirmDelete() {
               placeholder="443"
               class="w-full px-3.5 py-2 text-sm font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
-            <p class="text-[10px] text-slate-400 mt-1">请勿使用 10085 (本地 API 端口)</p>
+            <p class="text-[10px] text-slate-400 mt-1">无 root 节点建议使用 8443 等 ≥1024 端口；请勿使用 10085 (本地 API 端口)</p>
           </div>
         </div>
 
@@ -721,6 +721,7 @@ async function confirmDelete() {
               required
               class="w-full px-3.5 py-2 text-sm font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
             />
+            <p class="text-[10px] text-slate-400 mt-1">无 root 节点建议端口 ≥1024，如 8443；10085 为内部 API 端口</p>
           </div>
         </div>
 
@@ -759,11 +760,12 @@ async function confirmDelete() {
         <div class="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-xs text-blue-900 dark:text-blue-200 space-y-1">
           <div class="font-bold flex items-center gap-1.5">
             <Terminal class="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>在目标 VPS 以 root 权限执行下方命令</span>
+            <span>在目标 VPS 使用安装账户执行下方命令（支持无 root）</span>
           </div>
           <p class="text-blue-700 dark:text-blue-300">
             节点：<b>{{ enrollResult?.vpsName }}</b> • 令牌有效期 15 分钟，过期前：{{ enrollResult?.expiresAt ? new Date(enrollResult.expiresAt).toLocaleTimeString() : '' }}
           </p>
+          <p class="text-blue-700 dark:text-blue-300">root 且 systemd 可用时自动使用 systemd；否则使用独立进程监管。普通账户安装到 ~/.local/share/proxysetting，请先为节点选择可绑定端口（建议 8443）。</p>
         </div>
 
         <!-- Terminal Command Box -->

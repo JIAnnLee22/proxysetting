@@ -1,5 +1,5 @@
 // Package upgrade downloads a hash-verified, version-fixed release installer and
-// hands off to a separate transient systemd service. It never replaces agent/Xray.
+// hands off to an independent installer process. It never replaces agent/Xray.
 package upgrade
 
 import (
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"proxysetting/agent/internal/model"
+	"proxysetting/agent/internal/service"
 	"proxysetting/agent/internal/state"
 )
 
@@ -108,6 +109,16 @@ func (m *Manager) Apply(ctx context.Context, root, current string, u *model.Upgr
 	path := filepath.Join(root, "state", "upgrade.sh")
 	if e = state.Atomic(path, b); e != nil {
 		return e
+	}
+	mode, e := service.Mode(root)
+	if e != nil {
+		return ErrUpgrade
+	}
+	if mode == "standalone" {
+		if e = service.DetachedUpgrade(root, path, u.Version); e != nil {
+			return ErrUpgrade
+		}
+		return nil
 	}
 	// Fixed argv, not a shell command; --root is also forwarded to the installer.
 	// --collect releases the unit name after success/failure, permitting a retry.

@@ -1,5 +1,5 @@
 // Package install prepares an installation but never starts services or downloads
-// executable binaries. The root installer owns release verification and systemd units.
+// executable binaries. The shell installer owns release verification and service setup.
 package install
 
 import (
