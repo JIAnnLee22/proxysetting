@@ -62,26 +62,14 @@ function dumpNodeYaml(node: VergeNode): string {
   return lines.join("\n");
 }
 
-export function clashConfig(nodes: VergeNode[]): string {
-  let proxiesYaml = "proxies: []";
-  let groupProxiesYaml = "      - DIRECT\n      - REJECT";
-
-  if (nodes.length > 0) {
-    proxiesYaml = "proxies:\n" + nodes.map(dumpNodeYaml).join("\n");
-    groupProxiesYaml = nodes
-      .map((n) => `      - ${JSON.stringify(n.name)}`)
-      .concat(["      - DIRECT", "      - REJECT"])
-      .join("\n");
-  }
-
-  return `# Clash Verge Rev / Mihomo 本地完整配置
+export const DEFAULT_CLASH_TEMPLATE = `# Clash Verge Rev / Mihomo 本地完整配置
 # 分流：局域网直连、常见国内站点直连、中国 IP 直连、其余走“代理选择”。
 # 当前不包含节点；未添加节点时“代理选择”只有 DIRECT，所有流量实际直连。
 # 不会自动复用另一个订阅配置里的节点。
 # 使用方法：保存为 .yaml，导入本地配置并启用，打开系统代理，模式选“规则”。
 # 加入节点有两种方式：
-# 1. 将下方 proxies: [] 替换为你的 Clash/Mihomo 节点列表。
-# 2. 取消文件末尾 proxy-providers 示例的注释，并填入 Clash 格式订阅链接。
+# 1. 系统导出时已自动将你的专属节点注入到下方 proxies 中（支持 {{PROXIES}} 占位符）。
+# 2. 或在下方配置中添加更多自定义 proxy-providers。
 # 添加节点后，在“代理选择”中选择一个真实节点；DIRECT 表示直连。
 # Clash Verge 的端口、DNS 等设置可能覆写本文件对应设置。
 
@@ -114,14 +102,17 @@ dns:
     ipcidr:
       - 240.0.0.0/4
 
-${proxiesYaml}
+proxies:
+{{PROXIES}}
 
 proxy-groups:
   - name: PROXY
     type: select
     include-all: false
     proxies:
-${groupProxiesYaml}
+{{PROXY_NAMES}}      - DIRECT
+      - REJECT
+
 rule-providers:
   reject:
     type: http
@@ -219,7 +210,7 @@ rules:
   - DOMAIN,clash.razord.top,DIRECT
   - DOMAIN,yacd.haishan.me,DIRECT
   - RULE-SET,private,DIRECT
-  - RULE-SET,reject,REJECT
+  - RULE-SET,reject,DIRECT
   - RULE-SET,icloud,DIRECT
   - RULE-SET,apple,DIRECT
   - RULE-SET,google,PROXY
@@ -232,6 +223,56 @@ rules:
   - GEOIP,CN,DIRECT
   - MATCH,PROXY
 `;
+
+export function renderClashConfig(template: string, nodes: VergeNode[]): string {
+  let result = template;
+  const nodesDump = nodes.map(dumpNodeYaml).join("\n");
+  const nodesNames = nodes.map((n) => `      - ${JSON.stringify(n.name)}`).join("\n");
+
+  // 1. Inject proxies
+  if (result.includes("{{PROXIES}}")) {
+    if (nodes.length > 0) {
+      result = result.replace("{{PROXIES}}", nodesDump);
+    } else {
+      result = result.replace(/proxies:\s*\n?\s*\{\{PROXIES\}\}/, "proxies: []");
+      result = result.replace("{{PROXIES}}", "[]");
+    }
+  } else if (/proxies:\s*\[\]/.test(result)) {
+    if (nodes.length > 0) {
+      result = result.replace(/proxies:\s*\[\]/, "proxies:\n" + nodesDump);
+    }
+  } else if (result.includes("proxies:")) {
+    if (nodes.length > 0) {
+      result = result.replace(/(proxies:\s*\n)/, `$1${nodesDump}\n`);
+    }
+  } else if (nodes.length > 0) {
+    result = `proxies:\n${nodesDump}\n\n` + result;
+  }
+
+  // 2. Inject proxy names into groups
+  if (result.includes("{{PROXY_NAMES}}")) {
+    if (nodes.length > 0) {
+      result = result.replace("{{PROXY_NAMES}}", nodesNames + "\n");
+    } else {
+      result = result.replace("{{PROXY_NAMES}}", "");
+    }
+  } else if (nodes.length > 0) {
+    const proxyGroupMatch = /(- name:\s*['"]?PROXY['"]?[\s\S]*?proxies:\s*\n)/i.exec(result);
+    if (proxyGroupMatch) {
+      result = result.replace(proxyGroupMatch[1], `${proxyGroupMatch[1]}${nodesNames}\n`);
+    } else {
+      const genericGroupMatch = /(proxy-groups:[\s\S]*?proxies:\s*\n)/i.exec(result);
+      if (genericGroupMatch) {
+        result = result.replace(genericGroupMatch[1], `${genericGroupMatch[1]}${nodesNames}\n`);
+      }
+    }
+  }
+
+  return result;
+}
+
+export function clashConfig(nodes: VergeNode[], template?: string): string {
+  return renderClashConfig(template || DEFAULT_CLASH_TEMPLATE, nodes);
 }
 
 export async function getIdentityNodes(env: Env, identityId: string): Promise<VergeNode[]> {
@@ -298,6 +339,30 @@ export async function getIdentityNodes(env: Env, identityId: string): Promise<Ve
   return nodes;
 }
 
+export async function getSubTemplate(env: Env): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT value FROM settings WHERE key='sub_template'"
+    ).first<{ value: string }>();
+    return row?.value || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSubTemplate(env: Env, template: string | null): Promise<void> {
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))"
+  ).run();
+  if (template === null) {
+    await env.DB.prepare("DELETE FROM settings WHERE key='sub_template'").run();
+  } else {
+    await env.DB.prepare(
+      "INSERT INTO settings (key, value, updated_at) VALUES ('sub_template', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at"
+    ).bind(template).run();
+  }
+}
+
 export async function exportVerge(env: Env, identityId: string) {
   const nodes = await getIdentityNodes(env, identityId);
   return vergeScript(nodes);
@@ -305,5 +370,6 @@ export async function exportVerge(env: Env, identityId: string) {
 
 export async function exportClash(env: Env, identityId: string) {
   const nodes = await getIdentityNodes(env, identityId);
-  return clashConfig(nodes);
+  const custom = await getSubTemplate(env);
+  return clashConfig(nodes, custom || undefined);
 }

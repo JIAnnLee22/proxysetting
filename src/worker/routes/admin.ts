@@ -12,7 +12,13 @@ import {
   token,
   hash,
 } from "../core";
-import { exportVerge, exportClash } from "../export-verge";
+import {
+  exportVerge,
+  exportClash,
+  DEFAULT_CLASH_TEMPLATE,
+  getSubTemplate,
+  setSubTemplate,
+} from "../export-verge";
 import { checkAdminStatus, adminAuth } from "../auth";
 import type { Env, Grant, Identity, VPS } from "../types";
 function release(env: Env, version = env.RELEASE_VERSION) {
@@ -321,6 +327,41 @@ export async function adminRoutes(
         "Content-Disposition": 'attachment; filename="proxysetting-verge.js"',
       },
     });
+  }
+  if (path === "/api/admin/sub-template") {
+    if (request.method === "GET") {
+      const custom = await getSubTemplate(env);
+      return json({
+        template: custom || DEFAULT_CLASH_TEMPLATE,
+        isCustom: !!custom,
+        defaultTemplate: DEFAULT_CLASH_TEMPLATE,
+      });
+    }
+    if (request.method === "PUT") {
+      const b = await body(request);
+      if (b.template === null || b.template === "") {
+        await setSubTemplate(env, null);
+        return json({
+          ok: true,
+          isCustom: false,
+          template: DEFAULT_CLASH_TEMPLATE,
+        });
+      }
+      assert(
+        typeof b.template === "string" &&
+          b.template.length > 0 &&
+          b.template.length <= 131072 &&
+          !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(b.template),
+        "Invalid template: must be valid text under 128KB",
+      );
+      await setSubTemplate(env, b.template);
+      return json({
+        ok: true,
+        isCustom: true,
+        template: b.template,
+      });
+    }
+    throw new HttpError(405, "Method not allowed");
   }
   if (m) {
     const v = await env.DB.prepare("SELECT * FROM vps WHERE id=?")

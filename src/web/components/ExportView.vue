@@ -16,7 +16,10 @@ import {
   Radio,
   FileText,
   HelpCircle,
-  Eye
+  Eye,
+  Sliders,
+  RotateCcw,
+  Save
 } from '@lucide/vue'
 import { bytesToGiB } from '../lib/analytics'
 
@@ -24,8 +27,69 @@ const props = defineProps<{
   state: any
 }>()
 
-const activeTab = ref<'sub' | 'script'>('sub')
+const activeTab = ref<'sub' | 'template' | 'script'>('sub')
 const selectedIdentity = ref(props.state?.identities?.[0]?.id || '')
+
+// Subscription Template Customization States
+const templateContent = ref('')
+const isCustomTemplate = ref(false)
+const loadingTemplate = ref(false)
+const savingTemplate = ref(false)
+const resetConfirm = ref(false)
+
+async function fetchTemplate() {
+  loadingTemplate.value = true
+  try {
+    const res = await api('sub-template')
+    templateContent.value = res.template
+    isCustomTemplate.value = res.isCustom
+  } catch (e: any) {
+    showToast(e.message || '获取配置模板失败', 'error')
+  } finally {
+    loadingTemplate.value = false
+  }
+}
+
+async function handleSaveTemplate() {
+  if (!templateContent.value.trim()) {
+    showToast('模板内容不能为空', 'warning')
+    return
+  }
+  savingTemplate.value = true
+  try {
+    const res = await api('sub-template', 'PUT', { template: templateContent.value })
+    templateContent.value = res.template
+    isCustomTemplate.value = res.isCustom
+    yamlContent.value = ''
+    showToast('自定义订阅模板已保存并生效！', 'success')
+  } catch (e: any) {
+    showToast(e.message || '保存配置模板失败', 'error')
+  } finally {
+    savingTemplate.value = false
+  }
+}
+
+async function handleResetTemplate() {
+  savingTemplate.value = true
+  try {
+    const res = await api('sub-template', 'PUT', { template: null })
+    templateContent.value = res.template
+    isCustomTemplate.value = false
+    resetConfirm.value = false
+    yamlContent.value = ''
+    showToast('已成功重置为系统默认订阅模板', 'success')
+  } catch (e: any) {
+    showToast(e.message || '重置配置模板失败', 'error')
+  } finally {
+    savingTemplate.value = false
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'template' && !templateContent.value) {
+    fetchTemplate()
+  }
+})
 
 // Watch if state changes and selectedIdentity is empty
 watch(() => props.state?.identities, (ids) => {
@@ -234,22 +298,30 @@ const selectedIdentityNodes = computed(() => {
         </div>
 
         <!-- Export Format Toggle -->
-        <div class="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl max-w-md">
+        <div class="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl max-w-lg">
           <button
             @click="activeTab = 'sub'"
-            class="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer"
             :class="activeTab === 'sub' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
           >
             <Link class="w-3.5 h-3.5" />
-            <span>Clash Verge 订阅链接</span>
+            <span>订阅链接</span>
+          </button>
+          <button
+            @click="activeTab = 'template'"
+            class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            :class="activeTab === 'template' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+          >
+            <Sliders class="w-3.5 h-3.5" />
+            <span>自定义模板</span>
           </button>
           <button
             @click="activeTab = 'script'"
-            class="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition-all cursor-pointer"
             :class="activeTab === 'script' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
           >
             <FileCode class="w-3.5 h-3.5" />
-            <span>扩展脚本 (Script)</span>
+            <span>扩展脚本</span>
           </button>
         </div>
 
@@ -422,7 +494,88 @@ const selectedIdentityNodes = computed(() => {
           </div>
         </div>
 
-        <!-- Panel 2: Legacy Script Export Feature -->
+        <!-- Panel 2: Subscription Template Customization -->
+        <div v-if="activeTab === 'template'" class="space-y-4 pt-2">
+          <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <Sliders class="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  订阅基础配置模板 (Clash / Mihomo YAML)
+                </span>
+                <span
+                  class="text-[11px] px-2 py-0.5 rounded-full font-semibold"
+                  :class="isCustomTemplate ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'"
+                >
+                  {{ isCustomTemplate ? '管理员自定义模板' : '系统内置默认模板' }}
+                </span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  v-if="isCustomTemplate && !resetConfirm"
+                  @click="resetConfirm = true"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                >
+                  <RotateCcw class="w-3.5 h-3.5" />
+                  <span>恢复默认</span>
+                </button>
+                <div v-if="resetConfirm" class="flex items-center gap-1.5">
+                  <span class="text-[11px] text-rose-600 font-medium">确认重置？</span>
+                  <button
+                    @click="handleResetTemplate"
+                    :disabled="savingTemplate"
+                    class="px-2 py-0.5 text-[11px] font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded cursor-pointer"
+                  >
+                    确定
+                  </button>
+                  <button
+                    @click="resetConfirm = false"
+                    class="px-2 py-0.5 text-[11px] text-slate-500 hover:text-slate-700 cursor-pointer"
+                  >
+                    取消
+                  </button>
+                </div>
+                <button
+                  @click="fetchTemplate"
+                  :disabled="loadingTemplate"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                  title="重新从服务器加载"
+                >
+                  <RotateCcw class="w-3.5 h-3.5" :class="{ 'animate-spin': loadingTemplate }" />
+                  <span>重载</span>
+                </button>
+                <button
+                  @click="handleSaveTemplate"
+                  :disabled="savingTemplate || loadingTemplate"
+                  class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm shadow-blue-500/20 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                >
+                  <Save class="w-3.5 h-3.5" />
+                  <span>{{ savingTemplate ? '保存中...' : '保存配置模板' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Hint Accordion -->
+            <div class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200/80 dark:border-slate-800 space-y-1">
+              <p>💡 <b>配置提示：</b> 你可以在此自由修改端口、DNS、分流规则集（rule-providers）与路由分流策略（rules，例如将 REJECT 改为 DIRECT）。修改后需管理员权限保存，所有用户拉取订阅时立即生效。</p>
+              <p>📌 <b>占位符说明：</b> 模板支持 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;PROXIES&#125;&#125;</code>（节点注入点）与 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;PROXY_NAMES&#125;&#125;</code>（策略组节点名称注入点）。导出订阅时，系统会自动将该用户授权的各 Reality 节点注入至此处。</p>
+            </div>
+
+            <!-- Textarea Editor -->
+            <div class="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
+              <textarea
+                v-model="templateContent"
+                rows="20"
+                spellcheck="false"
+                class="w-full p-4 font-mono text-xs text-slate-200 bg-transparent resize-y outline-none leading-relaxed select-text"
+                placeholder="正在加载订阅模板..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 3: Legacy Script Export Feature -->
         <div v-if="activeTab === 'script'" class="space-y-4 pt-2">
           <div class="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
             <div>
