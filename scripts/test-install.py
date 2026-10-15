@@ -260,9 +260,9 @@ class InstallerTests(unittest.TestCase):
         self.call(expected=1)
         (self.base / 'os-release').write_text('ID=debian\n')
         self.call(expected=1, MOCK_ARCH='riscv64')
-        self.call(expected=1, MOCK_UID='1000')
+        self.call(['--service-mode', 'systemd'], expected=1, MOCK_UID='1000')
         (self.base / 'run-systemd').rmdir()
-        self.call(expected=1)
+        self.call(['--service-mode', 'systemd'], expected=1)
         self.assertNotIn('curl ', self.events())
         self.assertFalse(self.root.exists())
 
