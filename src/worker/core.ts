@@ -220,17 +220,11 @@ export async function desired(env: Env, vps: VPS): Promise<DesiredConfig> {
     serverName: vps.server_name,
     users: await Promise.all(
       grants.results.map(async (g) => {
-        const nominalQuota = g.quota_bytes;
-        const agentUser = usage?.users?.find((u: any) => u.id === g.identity_id);
-        const currentAgentTraffic = agentUser ? (agentUser.uplink + agentUser.downlink) : 0;
-        const lifetime = Math.max(g.lifetime_used_bytes || 0, currentAgentTraffic);
         const baseline = g.reset_baseline_bytes || 0;
-        const used = Math.max(0, lifetime - baseline);
-        const remaining = Math.max(0, nominalQuota - used);
-
-        let quotaBytes = remaining === 0
-          ? Math.max(1, currentAgentTraffic)
-          : Math.min(109951162777600, currentAgentTraffic + remaining);
+        const quotaBytes = Math.min(
+          109951162777600,
+          Math.max(1, g.quota_bytes + baseline),
+        );
 
         return {
           id: g.identity_id,

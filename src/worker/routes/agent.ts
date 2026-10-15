@@ -288,6 +288,19 @@ export async function agentRoutes(
       ).bind(v.id, s.day, dayPayload, now, v.id, s.sequence),
     ];
 
+    if (old && s.month > old.month) {
+      queries.push(
+        env.DB.prepare(
+          "UPDATE grant_resets SET reset_baseline_bytes=0, lifetime_used_bytes=0 WHERE vps_id=? AND EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?)",
+        ).bind(v.id, v.id, s.sequence),
+      );
+      queries.push(
+        env.DB.prepare(
+          "UPDATE vps SET revision=revision+1 WHERE id=? AND revoked=0 AND credential_hash=? AND EXISTS(SELECT 1 FROM snapshots WHERE vps_id=? AND sequence=?)",
+        ).bind(v.id, v.credential_hash, v.id, s.sequence),
+      );
+    }
+
     for (const u of s.users) {
       let delta = 0;
       if (old && old.month === s.month) {
