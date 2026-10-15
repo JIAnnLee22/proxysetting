@@ -68,7 +68,7 @@ export const DEFAULT_CLASH_TEMPLATE = `# Clash Verge Rev / Mihomo 本地完整�
 # 不会自动复用另一个订阅配置里的节点。
 # 使用方法：保存为 .yaml，导入本地配置并启用，打开系统代理，模式选“规则”。
 # 加入节点有两种方式：
-# 1. 系统导出时已自动将你的专属节点注入到下方 proxies 中（支持 {{PROXIES}} 占位符）。
+# 1. 系统导出时已自动将你的专属节点注入到下方 proxies 中。
 # 2. 或在下方配置中添加更多自定义 proxy-providers。
 # 添加节点后，在“代理选择”中选择一个真实节点；DIRECT 表示直连。
 # Clash Verge 的端口、DNS 等设置可能覆写本文件对应设置。
@@ -110,7 +110,8 @@ proxy-groups:
     type: select
     include-all: false
     proxies:
-{{PROXY_NAMES}}      - DIRECT
+{{PROXY_NAMES}}
+      - DIRECT
       - REJECT
 
 rule-providers:
@@ -229,41 +230,60 @@ export function renderClashConfig(template: string, nodes: VergeNode[]): string 
   const nodesDump = nodes.map(dumpNodeYaml).join("\n");
   const nodesNames = nodes.map((n) => `      - ${JSON.stringify(n.name)}`).join("\n");
 
-  // 1. Inject proxies
-  if (result.includes("{{PROXIES}}")) {
+  // 1. Inject proxies: match only non-comment lines containing {{PROXIES}}
+  const proxiesBlockRegex = /^[ \t]*proxies:[ \t]*\r?\n[ \t]*\{\{PROXIES\}\}[ \t]*$/m;
+  const standaloneProxiesRegex = /^[ \t]*(?!#)[^#\r\n]*?\{\{PROXIES\}\}[ \t]*$/m;
+
+  if (proxiesBlockRegex.test(result)) {
+    result = result.replace(proxiesBlockRegex, () =>
+      nodes.length > 0 ? `proxies:\n${nodesDump}` : "proxies: []",
+    );
+  } else if (standaloneProxiesRegex.test(result)) {
+    result = result.replace(standaloneProxiesRegex, () =>
+      nodes.length > 0 ? nodesDump : "  []",
+    );
+  } else if (/^[ \t]*proxies:[ \t]*\[\]/m.test(result)) {
     if (nodes.length > 0) {
-      result = result.replace("{{PROXIES}}", nodesDump);
-    } else {
-      result = result.replace(/proxies:\s*\n?\s*\{\{PROXIES\}\}/, "proxies: []");
-      result = result.replace("{{PROXIES}}", "[]");
+      result = result.replace(/^[ \t]*proxies:[ \t]*\[\]/m, () => `proxies:\n${nodesDump}`);
     }
-  } else if (/proxies:\s*\[\]/.test(result)) {
+  } else if (/^[ \t]*proxies:[ \t]*$/m.test(result)) {
     if (nodes.length > 0) {
-      result = result.replace(/proxies:\s*\[\]/, "proxies:\n" + nodesDump);
-    }
-  } else if (result.includes("proxies:")) {
-    if (nodes.length > 0) {
-      result = result.replace(/(proxies:\s*\n)/, `$1${nodesDump}\n`);
+      result = result.replace(/^[ \t]*proxies:[ \t]*$/m, () => `proxies:\n${nodesDump}`);
     }
   } else if (nodes.length > 0) {
     result = `proxies:\n${nodesDump}\n\n` + result;
   }
 
-  // 2. Inject proxy names into groups
-  if (result.includes("{{PROXY_NAMES}}")) {
-    if (nodes.length > 0) {
-      result = result.replace("{{PROXY_NAMES}}", nodesNames + "\n");
-    } else {
-      result = result.replace("{{PROXY_NAMES}}", "");
-    }
-  } else if (nodes.length > 0) {
+  // 2. Inject proxy names into groups: match only non-comment lines containing {{PROXY_NAMES}}
+  let proxyNamesReplaced = false;
+
+  // Case A: {{PROXY_NAMES}} on its own line (with trailing newline or end of string)
+  const proxyNamesLineRegex = /^[ \t]*(?!#)[ \t]*\{\{PROXY_NAMES\}\}[ \t]*(\r?\n|$)/gm;
+  if (proxyNamesLineRegex.test(result)) {
+    result = result.replace(proxyNamesLineRegex, () => {
+      proxyNamesReplaced = true;
+      return nodes.length > 0 ? `${nodesNames}\n` : "";
+    });
+  }
+
+  // Case B: Inline {{PROXY_NAMES}} on a non-comment line (e.g. `{{PROXY_NAMES}}      - DIRECT`)
+  const proxyNamesInlineRegex = /^((?!#)[^\r\n]*?)\{\{PROXY_NAMES\}\}/gm;
+  if (proxyNamesInlineRegex.test(result)) {
+    result = result.replace(proxyNamesInlineRegex, (_match, prefix) => {
+      proxyNamesReplaced = true;
+      return `${prefix}${nodes.length > 0 ? `${nodesNames}\n` : ""}`;
+    });
+  }
+
+  // Fallback: If no {{PROXY_NAMES}} was replaced, inject into PROXY or first group
+  if (!proxyNamesReplaced && nodes.length > 0) {
     const proxyGroupMatch = /(- name:\s*['"]?PROXY['"]?[\s\S]*?proxies:\s*\n)/i.exec(result);
     if (proxyGroupMatch) {
-      result = result.replace(proxyGroupMatch[1], `${proxyGroupMatch[1]}${nodesNames}\n`);
+      result = result.replace(proxyGroupMatch[1], () => `${proxyGroupMatch[1]}${nodesNames}\n`);
     } else {
       const genericGroupMatch = /(proxy-groups:[\s\S]*?proxies:\s*\n)/i.exec(result);
       if (genericGroupMatch) {
-        result = result.replace(genericGroupMatch[1], `${genericGroupMatch[1]}${nodesNames}\n`);
+        result = result.replace(genericGroupMatch[1], () => `${genericGroupMatch[1]}${nodesNames}\n`);
       }
     }
   }

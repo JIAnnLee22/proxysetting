@@ -10,7 +10,14 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     let response: Response;
     try {
-      assert(new URL(request.url).protocol === "https:", "HTTPS required", 403);
+      const reqUrl = new URL(request.url);
+      assert(
+        reqUrl.protocol === "https:" ||
+          reqUrl.hostname === "localhost" ||
+          reqUrl.hostname === "127.0.0.1",
+        "HTTPS required",
+        403,
+      );
       const path = new URL(request.url).pathname;
       if (path.startsWith("/api/agent/")) {
         response = await agentRoutes(request, env);

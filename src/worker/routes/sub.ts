@@ -3,12 +3,24 @@ import { exportClash } from "../export-verge";
 import type { Env, Grant, Snapshot } from "../types";
 
 export async function subRoutes(request: Request, env: Env): Promise<Response> {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+      },
+    });
+  }
   assert(request.method === "GET" || request.method === "HEAD", "Method not allowed", 405);
   const url = new URL(request.url);
   let id = url.searchParams.get("token") || url.searchParams.get("identity");
-  if (!id) {
-    const m = /^\/api\/sub\/([a-f0-9-]{36})$/.exec(url.pathname);
-    if (m) id = m[1];
+  if (id) {
+    id = id.trim().toLowerCase();
+  } else {
+    const m = /^\/api\/sub\/([a-f0-9-]{36})(?:\.ya?ml)?$/i.exec(url.pathname);
+    if (m) id = m[1].toLowerCase();
   }
   assert(id && /^[a-f0-9-]{36}$/.test(id), "Valid subscription token or identity required", 400);
 
@@ -19,6 +31,7 @@ export async function subRoutes(request: Request, env: Env): Promise<Response> {
     "Cache-Control": "no-store",
     "Content-Disposition": 'attachment; filename="clash-verge.yaml"',
     "Profile-Update-Interval": "24",
+    "Access-Control-Allow-Origin": "*",
   });
 
   // Calculate user quota info for Subscription-Userinfo header if available
