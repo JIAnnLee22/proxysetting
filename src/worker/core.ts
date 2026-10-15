@@ -191,24 +191,27 @@ export async function decrypt(env: Env, value: string, aad: string) {
   );
 }
 export async function desired(env: Env, vps: VPS): Promise<DesiredConfig> {
-  const recorded = await env.DB.prepare(
-    "SELECT payload FROM usage_periods WHERE vps_id=? AND period=?",
-  )
-    .bind(vps.id, calendar().month)
-    .first<{ payload: string }>();
-  const usage = recorded ? JSON.parse(recorded.payload) : null;
-  const grants = await env.DB.prepare(
-    `SELECT g.*,
-            COALESCE(r.reset_baseline_bytes, 0) as reset_baseline_bytes,
-            COALESCE(r.lifetime_used_bytes, 0) as lifetime_used_bytes
-     FROM grants g
-     JOIN identities i ON i.id=g.identity_id
-     LEFT JOIN grant_resets r ON r.vps_id=g.vps_id AND r.identity_id=g.identity_id
-     WHERE g.vps_id=? AND i.enabled=1
-     ORDER BY g.identity_id`,
-  )
-    .bind(vps.id)
-    .all<Grant & { reset_baseline_bytes: number; lifetime_used_bytes: number }>();
+  // A snapshot updates monthly and lifetime usage together. Read both in one
+  // transaction so overlapping uploads cannot change quotas at the same revision.
+  const [recorded, grants] = (await env.DB.batch([
+    env.DB.prepare(
+      "SELECT payload FROM usage_periods WHERE vps_id=? AND period=?",
+    ).bind(vps.id, calendar().month),
+    env.DB.prepare(
+      `SELECT g.*,
+              COALESCE(r.reset_baseline_bytes, 0) as reset_baseline_bytes,
+              COALESCE(r.lifetime_used_bytes, 0) as lifetime_used_bytes
+       FROM grants g
+       JOIN identities i ON i.id=g.identity_id
+       LEFT JOIN grant_resets r ON r.vps_id=g.vps_id AND r.identity_id=g.identity_id
+       WHERE g.vps_id=? AND i.enabled=1
+       ORDER BY g.identity_id`,
+    ).bind(vps.id),
+  ])) as [
+    D1Result<{ payload: string }>,
+    D1Result<Grant & { reset_baseline_bytes: number; lifetime_used_bytes: number }>,
+  ];
+  const usage = recorded.results[0] ? JSON.parse(recorded.results[0].payload) : null;
   return {
     schema: 1,
     vpsId: vps.id,
