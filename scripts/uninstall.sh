@@ -75,6 +75,7 @@ else
     for unit in "$AGENT_UNIT" "$XRAY_UNIT"; do
         rm -f -- "/etc/systemd/system/$unit"
     done
+    rm -f -- "/etc/sysctl.d/99-proxysetting-network.conf"
     if (( has_systemd )); then
         systemctl daemon-reload
         systemctl reset-failed "$AGENT_UNIT" "$XRAY_UNIT" >/dev/null 2>&1 || true

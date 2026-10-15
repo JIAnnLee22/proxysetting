@@ -6,7 +6,7 @@
 2. Web添加名称、公网IPv4/IPv6（首版仅字面IP，不接受DNS或私网地址）、端口和Reality候选目标。候选如www.cloudflare.com/www.microsoft.com/www.apple.com；安装时TLS1.3不通则失败，不部署。TLS1.3仅是必要条件，不保证Reality握手兼容：本次Arch VPS上www.microsoft.com通过TLS探测但Reality失败，www.cloudflare.com通过实际公网客户端验证。目标须逐台实测，不要求属于自己。
 3. 443冲突或目标TLS测试失败时，在Web“修改未部署参数”选择其他端口/目标；这会使旧令牌失效，需重新生成命令。已注册设备不能在线改地址/端口/目标，须显式重装。Web生成一次性命令，确认GitHub仓库/tag/脚本SHA256。使用选定安装账户在**对应VPS**执行，15分钟有效一次消费；普通账户请先选择可绑定的端口，建议 `8443` 等≥1024端口（不是自动把443改为8443，Web登记端口必须一致）。未授权的低端口在消费令牌前经实际bind检查拒绝；命令先下载校验脚本再运行，不直接curl|bash。token会出现在一次性命令里，关闭shell历史，勿贴入日志/聊天。
 4. 安装器完成权限/系统/架构/端口检查，下载校验双组件，agent生成本地Reality私钥、公钥/shortId、Xray配置，测试后注册，原子切换current并启动受监管的agent/Xray进程。仅公有Reality参数上传Worker。
-5. 手动检查主机防火墙和云安全组，放行Reality所选TCP端口（默认443），**不要开放10085**。安装器不关闭防火墙，也不能代替云控制台放行。
+5. 手动检查主机防火墙和云安全组，放行Reality所选TCP端口（默认443），**不要开放10085**。安装器不关闭防火墙，也不能代替云控制台放行。root安装时会自动写入 `/etc/sysctl.d/99-proxysetting-network.conf` 优化跨境高延迟网络协议栈（禁用空闲慢启动、开启服务端TFO、释放32MB套接字缓冲区、开启MTU探测）。
 6. 创建身份，每VPS填写正GiB月额度后才开通，等待ready/最新revision，再导出JS。额度耗尽不删除导出节点。
 
 ## 发布包格式

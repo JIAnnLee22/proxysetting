@@ -330,6 +330,22 @@ write_units() {
     done
     systemctl daemon-reload
 }
+configure_network() {
+    (( OWNER_UID == 0 )) || return 0
+    [[ -d /etc/sysctl.d ]] || return 0
+    cat >/etc/sysctl.d/99-proxysetting-network.conf <<'EOF'
+# Optimized by proxysetting for high-latency cross-border proxy performance
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_fastopen = 3
+net.core.rmem_max = 33554432
+net.core.wmem_max = 33554432
+net.ipv4.tcp_mtu_probing = 1
+EOF
+    chmod 0644 /etc/sysctl.d/99-proxysetting-network.conf
+    if command -v sysctl >/dev/null; then
+        sysctl -q -p /etc/sysctl.d/99-proxysetting-network.conf 2>/dev/null || true
+    fi
+}
 backup_installation() {
     install -d -m 0700 "$WORK/backup"
     cp -a -- "$ROOT/config" "$WORK/backup/config"
@@ -360,6 +376,7 @@ if [[ $MODE == install ]]; then
     done
     "$ROOT/current/bin/xray" run -test -config "$ROOT/config/xray.json" >/dev/null 2>&1 || die 'Xray configuration test failed'
     write_units
+    configure_network
     if [[ $SERVICE_MODE == systemd ]]; then systemctl enable "$AGENT_UNIT"; fi
     start_services || die 'agent readiness/health check failed'
 else
@@ -370,6 +387,7 @@ else
     "$NEW_RELEASE/bin/xray" run -test -config "$ROOT/config/xray.json" >/dev/null 2>&1 || die 'Xray configuration test failed'
     atomic_link "$NEW_RELEASE" current
     write_units
+    configure_network
     start_services || die 'new release readiness/health check failed'
     atomic_link "$OLD_RELEASE" previous
 fi
