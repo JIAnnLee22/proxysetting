@@ -346,6 +346,36 @@ EOF
         sysctl -q -p /etc/sysctl.d/99-proxysetting-network.conf 2>/dev/null || true
     fi
 }
+tune_xray_config() {
+    local xp="$ROOT/config/xray.json"
+    [[ -f $xp ]] || return 0
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "
+import json
+p = '$xp'
+try:
+    with open(p) as f: c = json.load(f)
+    changed = False
+    if c.get('log', {}).get('loglevel') != 'warning':
+        c.setdefault('log', {})['loglevel'] = 'warning'
+        changed = True
+    lvl0 = c.setdefault('policy', {}).setdefault('levels', {}).setdefault('0', {})
+    if lvl0.get('connIdle') != 1800:
+        lvl0['connIdle'] = 1800
+        lvl0['statsUserUplink'] = True
+        lvl0['statsUserDownlink'] = True
+        changed = True
+    if changed:
+        with open(p + '.tmp', 'w') as f: json.dump(c, f, indent=2)
+except Exception:
+    pass
+" 2>/dev/null || true
+        if [[ -f "$xp.tmp" ]]; then
+            chmod 0600 "$xp.tmp"
+            mv -f "$xp.tmp" "$xp"
+        fi
+    fi
+}
 backup_installation() {
     install -d -m 0700 "$WORK/backup"
     cp -a -- "$ROOT/config" "$WORK/backup/config"
@@ -384,6 +414,7 @@ else
     # Stop before downloading: this enforces final sampling even for automated systemd-run upgrades.
     stop_services || die 'could not stop agent/Xray safely'
     if [[ $MODE == upgrade ]]; then stage_release; fi
+    tune_xray_config
     "$NEW_RELEASE/bin/xray" run -test -config "$ROOT/config/xray.json" >/dev/null 2>&1 || die 'Xray configuration test failed'
     atomic_link "$NEW_RELEASE" current
     write_units
