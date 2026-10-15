@@ -96,10 +96,10 @@ func Keys() (private, public, short string, e error) {
 // by HandlerService only after the state is durable; a restarted Xray is fail-closed.
 func XrayConfig(c model.Installed) any {
 	return map[string]any{
-		"log":    map[string]any{"loglevel": "none"},
+		"log":    map[string]any{"loglevel": "warning"},
 		"api":    map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService"}},
 		"stats":  map[string]any{},
-		"policy": map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true}}},
+		"policy": map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "connIdle": 1800}}},
 		"inbounds": []any{
 			map[string]any{"tag": "api-in", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door", "settings": map[string]any{"address": "127.0.0.1"}},
 			map[string]any{"tag": model.InboundTag, "listen": "::", "port": c.Port, "protocol": "vless", "settings": map[string]any{"clients": []any{}, "decryption": "none"}, "streamSettings": map[string]any{"network": "tcp", "security": "reality", "realitySettings": map[string]any{"show": false, "target": net.JoinHostPort(c.ServerName, "443"), "xver": 0, "serverNames": []string{c.ServerName}, "privateKey": c.PrivateKey, "shortIds": []string{c.ShortID}}}},
