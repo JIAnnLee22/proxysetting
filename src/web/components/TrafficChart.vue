@@ -32,6 +32,11 @@ const props = defineProps<{
   labels: string[]
   uplinkData: number[]
   downlinkData: number[]
+  selectedIndex?: number | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'select-index', index: number): void
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -80,8 +85,13 @@ function initOrUpdateChart() {
           backgroundColor: colors.upFill,
           fill: true,
           tension: 0.35,
-          pointRadius: 3,
-          pointHoverRadius: 6,
+          pointRadius: (ctx: any) => {
+            return props.selectedIndex !== null && props.selectedIndex !== undefined && ctx.dataIndex === props.selectedIndex ? 6 : 3
+          },
+          pointHoverRadius: 7,
+          pointBorderWidth: (ctx: any) => {
+            return props.selectedIndex !== null && props.selectedIndex !== undefined && ctx.dataIndex === props.selectedIndex ? 3 : 1
+          },
           borderWidth: 2
         },
         {
@@ -91,8 +101,13 @@ function initOrUpdateChart() {
           backgroundColor: colors.downFill,
           fill: true,
           tension: 0.35,
-          pointRadius: 3,
-          pointHoverRadius: 6,
+          pointRadius: (ctx: any) => {
+            return props.selectedIndex !== null && props.selectedIndex !== undefined && ctx.dataIndex === props.selectedIndex ? 6 : 3
+          },
+          pointHoverRadius: 7,
+          pointBorderWidth: (ctx: any) => {
+            return props.selectedIndex !== null && props.selectedIndex !== undefined && ctx.dataIndex === props.selectedIndex ? 3 : 1
+          },
           borderWidth: 2
         }
       ]
@@ -103,6 +118,17 @@ function initOrUpdateChart() {
       interaction: {
         mode: 'index',
         intersect: false
+      },
+      onClick: (_event, elements) => {
+        if (elements && elements.length > 0) {
+          const index = elements[0].index
+          emit('select-index', index)
+        }
+      },
+      onHover: (event, chartElement) => {
+        if (event.native?.target) {
+          (event.native.target as HTMLElement).style.cursor = chartElement.length ? 'pointer' : 'default'
+        }
       },
       plugins: {
         legend: {
@@ -163,7 +189,7 @@ function initOrUpdateChart() {
 }
 
 watch(
-  () => [props.labels, props.uplinkData, props.downlinkData],
+  () => [props.labels, props.uplinkData, props.downlinkData, props.selectedIndex],
   () => {
     initOrUpdateChart()
   },

@@ -17,13 +17,22 @@ export interface PeriodData {
   };
 }
 
+// Legacy daily rows carry month-cumulative users; they cannot be counted as daily usage.
+export function getTrafficUsers(row: PeriodData): UserStats[] {
+  if (row.period.length === 10) {
+    if (!row.daily || row.daily.date !== row.period || row.daily.quality === 'missing') return [];
+    return row.daily.users;
+  }
+  return row.users;
+}
+
 export function aggregate(data: PeriodData[]) {
   const users = new Map<string, { uplink: number; downlink: number }>();
   let totalUp = 0;
   let totalDown = 0;
   
   for (const row of data) {
-    const list = row.daily ? row.daily.users : row.users;
+    const list = getTrafficUsers(row);
     for (const u of list) {
       const existing = users.get(u.id) || { uplink: 0, downlink: 0 };
       existing.uplink += u.uplink;
