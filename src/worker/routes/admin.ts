@@ -82,12 +82,14 @@ export async function adminRoutes(
       b.port !== 10085,
       "Reality port must differ from local API port 10085",
     );
-    const existing = await env.DB.prepare("SELECT id FROM vps WHERE name=?")
+    const existing = await env.DB.prepare(
+      "SELECT id FROM vps WHERE name=? AND status != 'deleted'",
+    )
       .bind(name)
       .first();
     assert(!existing, "VPS name already exists", 409);
     const r = await env.DB.prepare(
-      "INSERT INTO vps(id,name,address,port,server_name) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM vps)<10",
+      "INSERT INTO vps(id,name,address,port,server_name) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM vps WHERE status != 'deleted')<10",
     )
       .bind(
         id,
@@ -106,7 +108,7 @@ export async function adminRoutes(
     const vps = await env.DB.prepare("SELECT * FROM vps WHERE id=?")
       .bind(vm[1])
       .first<VPS>();
-    assert(vps, "VPS not found", 404);
+    assert(vps && vps.status !== "deleted", "VPS not found", 404);
 
     const hasAddress = b.address !== undefined;
     const hasPort = b.port !== undefined;
@@ -135,7 +137,7 @@ export async function adminRoutes(
       const newName = b.name !== undefined ? text(b.name, "name") : vps.name;
       if (newName !== vps.name) {
         const existing = await env.DB.prepare(
-          "SELECT id FROM vps WHERE name=? AND id != ?",
+          "SELECT id FROM vps WHERE name=? AND id != ? AND status != 'deleted'",
         )
           .bind(newName, vm[1])
           .first();
@@ -153,7 +155,7 @@ export async function adminRoutes(
     const newName = text(b.name, "name");
     if (newName !== vps.name) {
       const existing = await env.DB.prepare(
-        "SELECT id FROM vps WHERE name=? AND id != ?",
+        "SELECT id FROM vps WHERE name=? AND id != ? AND status != 'deleted'",
       )
         .bind(newName, vm[1])
         .first();
@@ -168,7 +170,7 @@ export async function adminRoutes(
     const vps = await env.DB.prepare("SELECT * FROM vps WHERE id=?")
       .bind(vm[1])
       .first<VPS>();
-    assert(vps, "VPS not found", 404);
+    assert(vps && vps.status !== "deleted", "VPS not found", 404);
     assert(
       vps.revoked === 1 || vps.status === "revoked",
       "Only revoked VPS can be deleted",
@@ -178,8 +180,9 @@ export async function adminRoutes(
       env.DB.prepare("DELETE FROM grants WHERE vps_id=?").bind(vm[1]),
       env.DB.prepare("DELETE FROM grant_resets WHERE vps_id=?").bind(vm[1]),
       env.DB.prepare("DELETE FROM snapshots WHERE vps_id=?").bind(vm[1]),
-      env.DB.prepare("DELETE FROM usage_periods WHERE vps_id=?").bind(vm[1]),
-      env.DB.prepare("DELETE FROM vps WHERE id=?").bind(vm[1]),
+      env.DB.prepare(
+        "UPDATE vps SET status='deleted',revoked=1,credential_hash=NULL,enrollment_hash=NULL,enrollment_expires=NULL,revision=revision+1 WHERE id=?",
+      ).bind(vm[1]),
     ]);
     return json({ ok: true });
   }
@@ -367,7 +370,7 @@ export async function adminRoutes(
     const v = await env.DB.prepare("SELECT * FROM vps WHERE id=?")
       .bind(m[1])
       .first<VPS>();
-    assert(v, "VPS not found", 404);
+    assert(v && v.status !== "deleted", "VPS not found", 404);
     if (m[2] === "enroll" && request.method === "POST") {
       const base = release(env);
       assert(

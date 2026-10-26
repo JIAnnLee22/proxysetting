@@ -365,10 +365,10 @@ function getUserPeriodVpsList(userId: string, periodKey: string = 'all', include
     const pct = totalRef > 0 ? (stat.total / totalRef) * 100 : 0
     list.push({
       vpsId,
-      name: v?.name || vpsId.slice(0, 8),
-      address: v?.address || '',
+      name: v?.name || `节点-${vpsId.slice(0, 8)}`,
+      address: v?.address || '已删除',
       port: v?.port || 0,
-      status: v?.status,
+      status: v?.status || 'deleted',
       uplink: stat.uplink,
       downlink: stat.downlink,
       total: stat.total,
@@ -537,21 +537,49 @@ const vpsBreakdown = computed(() => {
     }
   }
 
-  return (props.state?.vps || []).map((v: any) => {
-    const usage = isAll
-      ? (allMap.get(v.id) || { uplink: 0, downlink: 0, total: 0 })
-      : (vpsMap?.get(v.id) || { uplink: 0, downlink: 0, total: 0 })
-    return {
-      id: v.id,
-      name: v.name,
-      address: v.address,
-      port: v.port,
-      status: v.status,
-      up: usage.uplink,
-      down: usage.downlink,
-      total: usage.total
+  // Combine state.vps with any missing vps_ids present in currentData (fallback for deleted nodes)
+  const vpsList = [...(props.state?.vps || [])]
+  const knownIds = new Set(vpsList.map((v: any) => v.id))
+  for (const row of props.currentData) {
+    if (row.vps_id && !knownIds.has(row.vps_id)) {
+      knownIds.add(row.vps_id)
+      vpsList.push({
+        id: row.vps_id,
+        name: `节点-${row.vps_id.slice(0, 8)}`,
+        address: '已删除',
+        port: 0,
+        status: 'deleted'
+      })
     }
-  }).sort((a: any, b: any) => b.total - a.total)
+  }
+
+  return vpsList
+    .filter((v: any) => {
+      // Soft-deleted nodes are only shown if they have non-zero traffic in the selected scope
+      if (v.status === 'deleted') {
+        const usage = isAll
+          ? (allMap.get(v.id) || { uplink: 0, downlink: 0, total: 0 })
+          : (vpsMap?.get(v.id) || { uplink: 0, downlink: 0, total: 0 })
+        return usage.total > 0
+      }
+      return true
+    })
+    .map((v: any) => {
+      const usage = isAll
+        ? (allMap.get(v.id) || { uplink: 0, downlink: 0, total: 0 })
+        : (vpsMap?.get(v.id) || { uplink: 0, downlink: 0, total: 0 })
+      return {
+        id: v.id,
+        name: v.name,
+        address: v.address,
+        port: v.port,
+        status: v.status,
+        up: usage.uplink,
+        down: usage.downlink,
+        total: usage.total
+      }
+    })
+    .sort((a: any, b: any) => b.total - a.total)
 })
 
 const activeVpsTotalBytes = computed(() => {
@@ -1054,8 +1082,11 @@ const activeVpsTotalBytes = computed(() => {
             class="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"
           >
             <div class="flex items-center justify-between text-xs mb-1.5">
-              <span class="font-bold text-slate-800 dark:text-slate-200">{{ v.name }}</span>
-              <span class="font-semibold text-slate-900 dark:text-white">{{ formatBytes(v.total) }}</span>
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="font-bold text-slate-800 dark:text-slate-200 truncate">{{ v.name }}</span>
+                <span v-if="v.status === 'deleted'" class="text-[10px] px-1.5 py-0.2 rounded font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">已删除</span>
+              </div>
+              <span class="font-semibold text-slate-900 dark:text-white shrink-0">{{ formatBytes(v.total) }}</span>
             </div>
 
             <div class="w-full h-1.5 rounded-full bg-slate-200/70 dark:bg-slate-700 overflow-hidden mb-1.5">
@@ -1066,7 +1097,8 @@ const activeVpsTotalBytes = computed(() => {
             </div>
 
             <div class="flex items-center justify-between text-[10px] text-slate-400">
-              <span>{{ v.address }}:{{ v.port }}</span>
+              <span v-if="v.status === 'deleted'">已归档下线</span>
+              <span v-else>{{ v.address }}:{{ v.port }}</span>
               <span>↑ {{ formatBytes(v.up) }} / ↓ {{ formatBytes(v.down) }}</span>
             </div>
           </div>
@@ -1120,9 +1152,10 @@ const activeVpsTotalBytes = computed(() => {
             >
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2 min-w-0">
-                  <span class="w-2 h-2 rounded-full shrink-0" :class="v.status === 'ready' ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+                  <span class="w-2 h-2 rounded-full shrink-0" :class="v.status === 'ready' ? 'bg-emerald-500' : (v.status === 'deleted' ? 'bg-rose-400 dark:bg-rose-500' : 'bg-slate-400')"></span>
                   <span class="font-bold text-slate-900 dark:text-white truncate">{{ v.name }}</span>
-                  <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">{{ v.address }}:{{ v.port }}</span>
+                  <span v-if="v.status === 'deleted'" class="text-[10px] px-1.5 py-0.2 rounded font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">已删除</span>
+                  <span v-if="v.status !== 'deleted'" class="text-[10px] text-slate-400 font-mono hidden sm:inline">{{ v.address }}:{{ v.port }}</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                   <span class="font-bold text-slate-900 dark:text-white">{{ formatBytes(v.total) }}</span>

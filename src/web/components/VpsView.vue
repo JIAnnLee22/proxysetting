@@ -83,9 +83,12 @@ const showDeleteModal = ref(false)
 const deleting = ref(false)
 const deleteTarget = ref<{ id: string; name: string } | null>(null)
 
+// Active nodes list (excluding soft-deleted nodes)
+const activeVpsList = computed(() => (props.state?.vps || []).filter((v: any) => v.status !== 'deleted'))
+
 // Nodes stats
 const summary = computed(() => {
-  const list = props.state?.vps || []
+  const list = activeVpsList.value
   const ready = list.filter((v: any) => v.status === 'ready').length
   const syncing = list.filter((v: any) => v.status === 'syncing').length
   const pending = list.filter((v: any) => v.status === 'pending').length
@@ -115,7 +118,7 @@ async function handleAddVps() {
     showToast('Reality 端口不能为内部 API 端口 10085', 'warning')
     return
   }
-  const duplicate = (props.state?.vps || []).some((v: any) => v.name === nameTrimmed)
+  const duplicate = activeVpsList.value.some((v: any) => v.name === nameTrimmed)
   if (duplicate) {
     showToast(`节点名称 “${nameTrimmed}” 已存在，请使用其他名称`, 'warning')
     return
@@ -320,7 +323,7 @@ async function confirmDelete() {
   deleting.value = true
   try {
     await api(`vps/${deleteTarget.value.id}`, 'DELETE')
-    showToast(`已彻底删除节点 “${deleteTarget.value.name}”`, 'success')
+    showToast(`已删除节点 “${deleteTarget.value.name}”，历史流量记录已归档保留`, 'success')
     showDeleteModal.value = false
     emit('refresh')
   } catch (e: any) {
@@ -394,7 +397,7 @@ async function confirmDelete() {
     </div>
 
     <!-- Nodes List -->
-    <div v-if="!state?.vps || state.vps.length === 0" class="p-12 text-center rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div v-if="activeVpsList.length === 0" class="p-12 text-center rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
       <Server class="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
       <h3 class="text-base font-semibold text-slate-900 dark:text-white">暂无 VPS 节点</h3>
       <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
@@ -404,7 +407,7 @@ async function confirmDelete() {
 
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div
-        v-for="v in state.vps"
+        v-for="v in activeVpsList"
         :key="v.id"
         class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col justify-between transition-all duration-200 hover:shadow-md"
       >
@@ -850,9 +853,9 @@ async function confirmDelete() {
     <!-- Delete Confirm Modal -->
     <ConfirmModal
       v-model="showDeleteModal"
-      title="彻底删除节点"
-      :message="`确定要彻底删除节点 “${deleteTarget?.name}” 吗？此操作不可逆，将永久删除该节点的所有配置、授权分配以及历史流量记录，并释放节点数量配额。`"
-      confirm-text="确认彻底删除"
+      title="删除节点"
+      :message="`确定要删除节点 “${deleteTarget?.name}” 吗？此操作将移除该节点的配置与授权并释放节点配额，历史流量统计将予以保留并标记为已删除。`"
+      confirm-text="确认删除"
       :is-destructive="true"
       :loading="deleting"
       @confirm="confirmDelete"

@@ -302,7 +302,9 @@ export async function getIdentityNodes(env: Env, identityId: string): Promise<Ve
     .bind(identityId)
     .first<Identity>();
   assert(i, "Active identity not found", 404);
-  const all = await env.DB.prepare("SELECT * FROM vps ORDER BY id").all<VPS>();
+  const all = await env.DB.prepare(
+    "SELECT * FROM vps WHERE status != 'deleted' ORDER BY id",
+  ).all<VPS>();
   assert(all.results.length, "No VPS available", 409);
   const grants = await env.DB.prepare(
     "SELECT * FROM grants WHERE identity_id=?",

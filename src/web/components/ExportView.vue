@@ -242,7 +242,9 @@ function parseError(msg: string) {
 // Nodes overview for selected identity
 const selectedIdentityNodes = computed(() => {
   if (!selectedIdentity.value || !props.state?.vps) return []
-  return props.state.vps.map((v: any) => {
+  return props.state.vps
+    .filter((v: any) => v.status !== 'deleted')
+    .map((v: any) => {
     const grant = props.state.grants?.find((g: any) => g.vps_id === v.id && g.identity_id === selectedIdentity.value)
     return {
       id: v.id,

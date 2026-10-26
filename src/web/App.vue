@@ -60,7 +60,7 @@ const tabs = computed(() => {
       id: 'vps',
       label: 'VPS 节点',
       icon: Server,
-      count: state.value?.vps?.length
+      count: state.value?.vps?.filter((v: any) => v.status !== 'deleted')?.length
     },
     { id: 'export', label: '订阅导出', icon: FileCode }
   ]

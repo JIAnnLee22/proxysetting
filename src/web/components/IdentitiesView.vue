@@ -67,6 +67,9 @@ const showResetModal = ref(false)
 const pendingReset = ref<{ identityId: string; identityName: string; vpsId?: string; vpsName?: string } | null>(null)
 const resettingIdentity = ref<Record<string, boolean>>({})
 
+// Active nodes list (excluding soft-deleted nodes)
+const activeVpsList = computed(() => (props.state?.vps || []).filter((v: any) => v.status !== 'deleted'))
+
 // Identity status toggle loading
 const togglingIdentity = ref<Record<string, boolean>>({})
 
@@ -161,7 +164,7 @@ function formatResetTime(isoStr: string | null | undefined): string | null {
 function getUserTotalMonthUsage(identityId: string) {
   let up = 0
   let down = 0
-  for (const v of props.state?.vps || []) {
+  for (const v of activeVpsList.value) {
     const u = getUserUsageOnVps(v.id, identityId)
     if (u) {
       up += (u.uplink || 0)
@@ -468,17 +471,17 @@ async function confirmRemoveGrant() {
               <span>各 VPS 节点月额度分配</span>
             </div>
             <div class="text-xs text-slate-400">
-              共 {{ state?.vps?.length || 0 }} 个节点
+              共 {{ activeVpsList.length }} 个节点
             </div>
           </div>
 
-          <div v-if="!state?.vps || state.vps.length === 0" class="text-xs text-slate-400 p-4 text-center border border-dashed rounded-xl">
+          <div v-if="activeVpsList.length === 0" class="text-xs text-slate-400 p-4 text-center border border-dashed rounded-xl">
             暂无 VPS 节点，请先在 “VPS 节点” 标签页添加节点。
           </div>
 
           <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
             <div
-              v-for="vps in state.vps"
+              v-for="vps in activeVpsList"
               :key="vps.id"
               class="p-4 rounded-xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/30 flex flex-col justify-between gap-3.5 transition-colors"
             >

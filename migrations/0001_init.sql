@@ -25,7 +25,7 @@ CREATE TABLE rate_limits (key TEXT PRIMARY KEY, window INTEGER NOT NULL, count I
 CREATE INDEX grants_identity ON grants(identity_id);
 CREATE INDEX usage_period ON usage_periods(period);
 CREATE INDEX enrollment_expiry ON vps(enrollment_expires);
-CREATE UNIQUE INDEX IF NOT EXISTS vps_name ON vps(name);
+CREATE UNIQUE INDEX IF NOT EXISTS vps_name ON vps(name) WHERE status != 'deleted';
 CREATE TABLE IF NOT EXISTS grant_resets (
  vps_id TEXT NOT NULL REFERENCES vps(id), identity_id TEXT NOT NULL REFERENCES identities(id),
  reset_baseline_bytes INTEGER NOT NULL DEFAULT 0, lifetime_used_bytes INTEGER NOT NULL DEFAULT 0,
