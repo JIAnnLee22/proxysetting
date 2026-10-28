@@ -17,6 +17,22 @@
 | proxysetting-agent-linux-amd64.tar.gz | `071b0c0c6d71369cf3cea7a29aba260c22acc05967b5c17483c58f08c884a573` |
 | proxysetting-agent-linux-arm64.tar.gz | `400366b0cd7b3e0f81d34820771ccb2a6f136fd58ec80ad8f6b106ff16059c45` |
 
+### v0.1.6（BBR/fq 网络调优）
+- [v0.1.6](https://github.com/JIAnnLee22/proxysetting/releases/tag/v0.1.6)，提交`1537b4840fc035a9a8a77cbc6f5640ff54fa0c2b`；[CI 40667799398](https://github.com/JIAnnLee22/proxysetting/actions/runs/40667799398)的verify、双架构build、release全部success。
+- 安装器新增：root且可写`/etc/sysctl.d`时写入`fq`+`bbr`；内核未提供BBR时自动省略该行，其余调优不变。升级路径同样重新应用。`bash -n`、ShellCheck与29项`test-install.py`通过。
+- Release资产下载后核对：`install.sh`与tag源码逐字节一致，`SHA256SUMS`校验通过。
+
+| v0.1.6 资产 | SHA256 |
+|---|---|
+| install.sh | `18e528bcd4961fff93176411fdf47d60d4eb057daa26e0a7376ac2bba7c7f305` |
+| proxysetting-agent-linux-amd64.tar.gz | `5fac6578babc90d2e3075a2567d842a0df6e6c7c645b28d2d2fd1fe0e1b2e1ee` |
+| proxysetting-agent-linux-arm64.tar.gz | `d8870fd4124f052b80f20055a8bd4ac8a61e89219070ff4153d7e0e3881d60e7` |
+| proxysetting-xray-linux-amd64.tar.gz | `814386c5f4ea29c9d22401cd9aa75bf5bfa78b934f8cb3bf53d363a10c153c48` |
+| proxysetting-xray-linux-arm64.tar.gz | `ac1e01f6ce5ea8b867a736ead8e0ffab5fd272e3df904af9e3c3609561a8ccb2` |
+
+- Worker `proxysetting-next` 已更新`INSTALL_SHA256`并部署`RELEASE_VERSION=v0.1.6`；匿名`/api/admin/state`返回`releaseVersion: v0.1.6`，首页200。升级弹窗默认值改为从该字段读取，部署命令由Worker按同一版本生成。
+- 线上现有节点仍为v0.1.5；逐个升级后才会应用BBR/fq，升级会短暂重启agent/Xray。
+
 ## Cloudflare真实部署（此前Access版本记录）
 - 用户Wrangler OAuth账号邮箱jiannlee22@gmail.com；创建独立proxysetting D1并应用0001 migration，旧sing-box-subscription数据库未改动。
 - Worker地址：`https://proxysetting.jiannlee22.workers.dev`；固定repo JIAnnLee22/proxysetting、v0.1.1及上述安装器hash。UUID_KEY以0600私有文件另存仓库外，未提交或上传GitHub。
