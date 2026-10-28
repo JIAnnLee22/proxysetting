@@ -68,6 +68,7 @@ export async function adminRoutes(
       })),
       calendar: calendar(),
       isAdmin,
+      releaseVersion: env.RELEASE_VERSION,
     });
   }
   if (path === "/api/admin/login" && request.method === "POST") {

@@ -71,7 +71,8 @@ const copiedCommand = ref(false)
 const showUpgradeModal = ref(false)
 const upgrading = ref(false)
 const upgradeTarget = ref<{ id: string; name: string; version: string } | null>(null)
-const upgradeVersion = ref('v0.1.1')
+const upgradeVersion = ref('')
+const releaseVersion = computed(() => props.state?.releaseVersion || '')
 
 // Revoke Confirm Modal
 const showRevokeModal = ref(false)
@@ -269,8 +270,9 @@ async function copyEnrollCommand() {
 
 // Upgrade version
 function openUpgradeModal(vps: any) {
-  upgradeTarget.value = { id: vps.id, name: vps.name, version: vps.version || 'v0.1.1' }
-  upgradeVersion.value = vps.version || 'v0.1.1'
+  const installed = vps.version || ''
+  upgradeTarget.value = { id: vps.id, name: vps.name, version: installed }
+  upgradeVersion.value = releaseVersion.value || installed
   showUpgradeModal.value = true
 }
 
@@ -812,11 +814,12 @@ async function confirmDelete() {
             v-model="upgradeVersion"
             type="text"
             required
-            placeholder="例如: v0.1.1"
+            :placeholder="`例如: ${releaseVersion || 'v0.1.6'}`"
             class="w-full px-3.5 py-2 text-sm font-mono rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
           />
           <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
             请输入已在 GitHub Releases 发布的版本号。节点将在下次心跳时自动安全校验 SHA256 并热升级。
+            <span v-if="releaseVersion">当前面板固定 {{ releaseVersion }}。</span>
           </p>
         </div>
 

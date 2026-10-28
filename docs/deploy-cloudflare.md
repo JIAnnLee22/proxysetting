@@ -1,6 +1,6 @@
 # 部署 Cloudflare 免费版
 ## 准备发布
-公开GitHub仓库，代码推送后按 `.github/workflows/release.yml` 发布固定tag（当前部署固定 `v0.1.3`）；Release需有 install.sh、两架构agent `tar.gz`、两架构Xray `tar.gz` 和SHA256SUMS。VPS不使用ZIP安装包，无需unzip。首次执行脚本不能仅依赖同一下载源的校验文件：管理员审核源码/CI，取固定install.sh的SHA256，填Worker `INSTALL_SHA256`。Xray官方版本/ZIP哈希固定在CI，校验后转为 `tar.gz` 发布，不用latest下载。格式变更需发布新固定tag，不覆盖旧Release；同步Worker的 `RELEASE_VERSION` 和新安装器的 `INSTALL_SHA256`。
+公开GitHub仓库，代码推送后按 `.github/workflows/release.yml` 发布固定tag（当前部署固定 `v0.1.6`）；Release需有 install.sh、两架构agent `tar.gz`、两架构Xray `tar.gz` 和SHA256SUMS。VPS不使用ZIP安装包，无需unzip。首次执行脚本不能仅依赖同一下载源的校验文件：管理员审核源码/CI，取固定install.sh的SHA256，填Worker `INSTALL_SHA256`。Xray官方版本/ZIP哈希固定在CI，校验后转为 `tar.gz` 发布，不用latest下载。格式变更需发布新固定tag，不覆盖旧Release；同步Worker的 `RELEASE_VERSION` 和新安装器的 `INSTALL_SHA256`。
 
 ## D1、Worker与Secrets
 当前 `wrangler.jsonc` 的默认 Worker 名为 `proxysetting-next`，D1 名称仍为 `proxysetting`，二者无需同名。**替换已有 Worker 时直接复用原 D1，不要重新创建数据库或重新生成 UUID_KEY**，见下文“替换 Worker”。以下创建数据库步骤仅用于全新安装：
@@ -9,7 +9,7 @@ npm ci
 npx wrangler login
 npx wrangler d1 create proxysetting
 ```
-首次安装把返回ID写入 `wrangler.jsonc` 的 database_id；替换部署保持原ID不变。按需修改Worker名称；配置 `RELEASE_REPO=owner/repo`、`RELEASE_VERSION=v0.1.3`。
+首次安装把返回ID写入 `wrangler.jsonc` 的 database_id；替换部署保持原ID不变。按需修改Worker名称；配置 `RELEASE_REPO=owner/repo`、`RELEASE_VERSION=v0.1.6`。
 ```
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put UUID_KEY
@@ -22,12 +22,12 @@ ADMIN_PASSWORD：用 `openssl rand -base64 24` 生成随机密码，保存到密
 UUID_KEY：生成32随机字节Base64（如 `openssl rand -base64 32`），保存到密码管理器/离线备份。**丢失会导致既有UUID无法解密；不能直接替换此secret，密钥轮换需专用重加密迁移（首版不提供）**。INSTALL_SHA256是64小写hex，用于首次安装脚本固定。`.dev.vars`可用于本地测试但不能提交；本地管理端需用 `npm run dev -- --local-protocol https`，HTTP请求会被拒绝且不弹密码框。`npm run verify`不要求云账号，验证本地D1和构建。
 
 ## 同步安装版本与校验值
-安装命令使用 Worker 的 `RELEASE_VERSION`，不会自动跟随 GitHub latest 或前端版本。当前固定 `v0.1.3`，其 `install.sh` SHA256 已核对 Release 文件、`SHA256SUMS` 和对应 tag 源码。已有部署从 `v0.1.1` 切换时，必须同步更新 `INSTALL_SHA256`，否则脚本校验失败：
+安装命令使用 Worker 的 `RELEASE_VERSION`，不会自动跟随 GitHub latest 或前端版本。当前固定 `v0.1.6`，其 `install.sh` SHA256 已核对 Release 文件、`SHA256SUMS` 和对应 tag 源码。已有部署从 `v0.1.1` 切换时，必须同步更新 `INSTALL_SHA256`，否则脚本校验失败：
 ```bash
-printf '%s\n' 'f4c6b33ee20100c90f9f0dab9ace315800922c187c6b8f533ef2cfd026d26662' | npx wrangler secret put INSTALL_SHA256
+printf '%s\n' '18e528bcd4961fff93176411fdf47d60d4eb057daa26e0a7376ac2bba7c7f305' | npx wrangler secret put INSTALL_SHA256
 npm run deploy
 ```
-这里的 SHA256 是公开校验值，不是管理员密码。未来切换其他固定 tag 时，重新核对并更新对应安装器校验值；部署后关闭旧命令弹窗，重新获取安装命令，不要手动替换旧命令中的版本号。
+`v0.1.6` 的安装器在 root 且可写 `/etc/sysctl.d` 时写入 `99-proxysetting-network.conf`，启用 BBR/fq 并保留原有 fastopen、缓冲区与 MTU 探测配置；内核不支持 BBR 时自动省略该行。这里的 SHA256 是公开校验值，不是管理员密码。未来切换其他固定 tag 时，重新核对并更新对应安装器校验值；部署后关闭旧命令弹窗，重新获取安装命令，不要手动替换旧命令中的版本号。
 
 ## 管理员密码（不使用Cloudflare Access）
 当前版本提供访客只读总览：根页面、静态资源、`/api/admin/state` 和 `/api/admin/analytics` 可匿名访问；state 返回 `isAdmin: false`。管理员用户名为 `admin`，密码为 `ADMIN_PASSWORD`，通过 HTTPS Basic 验证；登录及其他管理接口需要管理员凭据，管理写操作还须同源。`/api/agent/*` 保留独立设备bearer凭据，不要求管理员密码，也无需路径Bypass；订阅使用独立订阅标识。安装文件来自固定GitHub Release。

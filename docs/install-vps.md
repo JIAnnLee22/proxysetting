@@ -49,10 +49,10 @@ bash scripts/check.sh --root "$ROOT" # 仓库本地检查入口
 Web“升级版本”输入固定 `vMAJOR.MINOR.PATCH`，Worker只读取已配置GitHub仓库该tag的SHA256SUMS，下发经hash验证的安装脚本；systemd模式由agent独立systemd-run执行，独立模式启动脱离会话且不随agent停止的安装器进程（输出仅写当前root下0600的 `state/upgrade.log`），升级器读取本地root/config/release.env仓库，不接受任意URL。不得使用latest。服务模式记录在本地 `config/release.env`，升级/回滚不会自动切换模式，即使之后取得root或安装了systemd也保持原方式。升级前agent最终采样，保存并备份状态/配置；原子切换、Xray配置检查及agent readiness失败则回滚旧版本，**绝不把旧备份覆盖新的usage/sequence**。
 手工使用已校验的本地脚本：
 ```
-/opt/proxysetting/current/install.sh --upgrade --root /opt/proxysetting --version v0.1.1
+/opt/proxysetting/current/install.sh --upgrade --root /opt/proxysetting --version v0.1.6
 /opt/proxysetting/current/install.sh --rollback --root /opt/proxysetting
 ```
-初装必须显式指定固定 `vMAJOR.MINOR.PATCH`，不接受latest；Web命令由Worker锁定发行版本和安装器SHA256。安装器还核对agent编译版本与所指定release一致。旧config schema兼容性由后续release负责，当前不自动迁移任意格式。
+升级会复用本地 `config/release.env` 中的仓库与固定版本，并在 root 安装时重新应用网络调优（BBR/fq，内核不支持 BBR 时自动回退）。初装必须显式指定固定 `vMAJOR.MINOR.PATCH`，不接受latest；Web命令由Worker锁定发行版本和安装器SHA256。安装器还核对agent编译版本与所指定release一致。旧config schema兼容性由后续release负责，当前不自动迁移任意格式。
 systemd模式下改过unit、有drop-ins会拒绝；所有模式下仓库不匹配、文件不属于安装账户或release目录已存在都会拒绝。失败版本目录保留供检查，重试之前仅移除经确认失败的releases/VERSION。断电/SIGKILL不可完整事务恢复，可能服务保持停止，应人工用previous/config备份恢复并确认state不回退。
 
 ## 撤销、凭据轮换与重装

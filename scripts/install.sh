@@ -333,14 +333,24 @@ write_units() {
 configure_network() {
     (( OWNER_UID == 0 )) || return 0
     [[ -d /etc/sysctl.d && -w /etc/sysctl.d ]] || return 0
-    cat >/etc/sysctl.d/99-proxysetting-network.conf 2>/dev/null <<'EOF' || return 0
-# Optimized by proxysetting for high-latency cross-border proxy performance
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_fastopen = 3
-net.core.rmem_max = 33554432
-net.core.wmem_max = 33554432
-net.ipv4.tcp_mtu_probing = 1
-EOF
+    local congestion=''
+    if ! grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+        modprobe tcp_bbr 2>/dev/null || true
+    fi
+    if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+        congestion='net.ipv4.tcp_congestion_control = bbr'
+    fi
+    {
+        printf '%s\n' \
+            '# Optimized by proxysetting for high-latency cross-border proxy performance' \
+            'net.ipv4.tcp_slow_start_after_idle = 0' \
+            'net.ipv4.tcp_fastopen = 3' \
+            'net.core.rmem_max = 33554432' \
+            'net.core.wmem_max = 33554432' \
+            'net.ipv4.tcp_mtu_probing = 1' \
+            'net.core.default_qdisc = fq'
+        [[ -z $congestion ]] || printf '%s\n' "$congestion"
+    } >/etc/sysctl.d/99-proxysetting-network.conf 2>/dev/null || return 0
     chmod 0644 /etc/sysctl.d/99-proxysetting-network.conf 2>/dev/null || true
     if command -v sysctl >/dev/null; then
         sysctl -q -p /etc/sysctl.d/99-proxysetting-network.conf 2>/dev/null || true
