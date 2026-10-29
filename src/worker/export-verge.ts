@@ -78,6 +78,8 @@ allow-lan: false
 bind-address: 127.0.0.1
 mode: rule
 log-level: info
+unified-delay: true
+tcp-concurrent: true
 ipv6: false
 
 profile:
@@ -87,20 +89,19 @@ dns:
   enable: true
   ipv6: false
   enhanced-mode: redir-host
+  respect-rules: true
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-  fallback:
-    - https://1.1.1.1/dns-query
-    - https://dns.google/dns-query
-  fallback-filter:
-    geoip: true
-    geoip-code: CN
-    ipcidr:
-      - 240.0.0.0/4
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+  nameserver-policy:
+    "+.google.com,+.gstatic.com,+.googleapis.com,+.googleusercontent.com,+.googlevideo.com,+.ggpht.com,+.gvt1.com,+.gvt2.com,+.youtube.com,+.ytimg.com,+.pki.goog":
+      - https://dns.google/dns-query
+  proxy-server-nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
 
 proxies:
 {{PROXIES}}
