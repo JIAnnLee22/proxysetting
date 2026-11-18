@@ -96,12 +96,27 @@ dns:
   nameserver:
     - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
-  nameserver-policy:
-    "+.google.com,+.gstatic.com,+.googleapis.com,+.googleusercontent.com,+.googlevideo.com,+.ggpht.com,+.gvt1.com,+.gvt2.com,+.youtube.com,+.ytimg.com,+.pki.goog":
-      - https://dns.google/dns-query
   proxy-server-nameserver:
     - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
+
+# TUN/浏览器自带 DoH 时连接可能只剩 IP；从 TLS/HTTP/QUIC 首包恢复域名，
+# 让域名规则继续生效，避免被 GEOIP 误分到直连。
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "Mijia Cloud"
+    - "+.push.apple.com"
 
 proxies:
 {{PROXIES}}
