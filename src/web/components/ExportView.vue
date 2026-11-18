@@ -33,6 +33,9 @@ const selectedIdentity = ref(props.state?.identities?.[0]?.id || '')
 // Subscription Template Customization States
 const templateContent = ref('')
 const isCustomTemplate = ref(false)
+const legacyRuleTemplate = computed(
+  () => isCustomTemplate.value && templateContent.value.includes('cdn.jsdelivr.net')
+)
 const loadingTemplate = ref(false)
 const savingTemplate = ref(false)
 const resetConfirm = ref(false)
@@ -560,8 +563,11 @@ const selectedIdentityNodes = computed(() => {
 
             <!-- Hint Accordion -->
             <div class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200/80 dark:border-slate-800 space-y-1">
-              <p>💡 <b>配置提示：</b> 你可以在此自由修改端口、DNS、分流规则集（rule-providers）与路由分流策略（rules，例如将 REJECT 改为 DIRECT）。修改后需管理员权限保存，所有用户拉取订阅时立即生效。</p>
-              <p>📌 <b>占位符说明：</b> 模板支持 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;PROXIES&#125;&#125;</code>（节点注入点）与 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;PROXY_NAMES&#125;&#125;</code>（策略组节点名称注入点）。导出订阅时，系统会自动将该用户授权的各 Reality 节点注入至此处。</p>
+              <p v-if="legacyRuleTemplate" class="text-amber-600 dark:text-amber-400">
+                ⚠️ 当前自定义模板仍从 <code class="font-mono">cdn.jsdelivr.net</code> 拉取规则集；点击上方“恢复默认”即可切换到本面板自托管的 <code class="font-mono">/rules/</code> 规则集。
+              </p>
+              <p>💡 <b>配置提示：</b> 规则集默认由本面板自托管在 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">/rules/</code>（MRS 格式，需 Mihomo / Clash Verge Rev）。默认把广告域名 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">reject</code> 指向 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">REJECT</code> 以避免直连超时；如需放行广告，可改为 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">DIRECT</code> 或删除该规则。修改后需管理员权限保存，所有用户拉取订阅时立即生效。</p>
+              <p>📌 <b>占位符说明：</b> 模板支持 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;PROXIES&#125;&#125;</code>（节点注入点）、<code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;PROXY_NAMES&#125;&#125;</code>（策略组节点名称注入点）与 <code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">&#123;&#123;RULES_BASE&#125;&#125;</code>（规则集基地址，导出时自动替换为当前订阅域名）。导出订阅时，系统会自动将该用户授权的各 Reality 节点注入至此处。</p>
             </div>
 
             <!-- Textarea Editor -->

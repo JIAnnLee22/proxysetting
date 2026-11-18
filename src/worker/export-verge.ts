@@ -63,7 +63,11 @@ function dumpNodeYaml(node: VergeNode): string {
 }
 
 export const DEFAULT_CLASH_TEMPLATE = `# Clash Verge Rev / Mihomo 本地完整配置
-# 分流：局域网直连、常见国内站点直连、中国 IP 直连、其余走“代理选择”。
+# 分流：局域网/本机直连、国内域名直连、中国 IP 直连，其余走“代理选择”。
+# 规则集由本面板自托管（{{RULES_BASE}}/rules/），不再依赖 jsdelivr。
+# 规则优先顺序：直连优先项 → 广告拦截 → 代理域名 → 直连域名 → 中国/Telegram IP。
+# 广告域名使用 REJECT（立即拒绝），避免像直连那样等待超时；如需放行广告，
+# 可把 RULE-SET,reject,REJECT 改成 DIRECT，或删除该条规则。
 # 当前不包含节点；未添加节点时“代理选择”只有 DIRECT，所有流量实际直连。
 # 不会自动复用另一个订阅配置里的节点。
 # 使用方法：保存为 .yaml，导入本地配置并启用，打开系统代理，模式选“规则”。
@@ -131,112 +135,87 @@ proxy-groups:
       - REJECT
 
 rule-providers:
+  direct-priority:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "{{RULES_BASE}}/rules/direct-priority.mrs"
+    path: ./ruleset/direct-priority.mrs
+    interval: 86400
+    proxy: DIRECT
+
   reject:
     type: http
     behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt"
-    path: ./ruleset/reject.yaml
+    format: mrs
+    url: "{{RULES_BASE}}/rules/reject.mrs"
+    path: ./ruleset/reject.mrs
     interval: 86400
-
-  icloud:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/icloud.txt"
-    path: ./ruleset/icloud.yaml
-    interval: 86400
-
-  apple:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt"
-    path: ./ruleset/apple.yaml
-    interval: 86400
-
-  google:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/google.txt"
-    path: ./ruleset/google.yaml
-    interval: 86400
+    proxy: DIRECT
 
   proxy:
     type: http
     behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/proxy.txt"
-    path: ./ruleset/proxy.yaml
+    format: mrs
+    url: "{{RULES_BASE}}/rules/proxy.mrs"
+    path: ./ruleset/proxy.mrs
     interval: 86400
+    proxy: DIRECT
 
   direct:
     type: http
     behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt"
-    path: ./ruleset/direct.yaml
+    format: mrs
+    url: "{{RULES_BASE}}/rules/direct.mrs"
+    path: ./ruleset/direct.mrs
     interval: 86400
+    proxy: DIRECT
 
-  private:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt"
-    path: ./ruleset/private.yaml
-    interval: 86400
-
-  gfw:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt"
-    path: ./ruleset/gfw.yaml
-    interval: 86400
-
-  tld-not-cn:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/tld-not-cn.txt"
-    path: ./ruleset/tld-not-cn.yaml
-    interval: 86400
-
-  telegramcidr:
+  cn-ip:
     type: http
     behavior: ipcidr
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/telegramcidr.txt"
-    path: ./ruleset/telegramcidr.yaml
+    format: mrs
+    url: "{{RULES_BASE}}/rules/cn-ip.mrs"
+    path: ./ruleset/cn-ip.mrs
     interval: 86400
+    proxy: DIRECT
 
-  cncidr:
+  telegram-ip:
     type: http
     behavior: ipcidr
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt"
-    path: ./ruleset/cncidr.yaml
+    format: mrs
+    url: "{{RULES_BASE}}/rules/telegram-ip.mrs"
+    path: ./ruleset/telegram-ip.mrs
     interval: 86400
-
-  lancidr:
-    type: http
-    behavior: ipcidr
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt"
-    path: ./ruleset/lancidr.yaml
-    interval: 86400
+    proxy: DIRECT
 
   applications:
     type: http
     behavior: classical
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/applications.txt"
+    url: "{{RULES_BASE}}/rules/applications.yaml"
     path: ./ruleset/applications.yaml
     interval: 86400
+    proxy: DIRECT
 
 rules:
   - RULE-SET,applications,DIRECT
   - DOMAIN,clash.razord.top,DIRECT
   - DOMAIN,yacd.haishan.me,DIRECT
-  - RULE-SET,private,DIRECT
-  - RULE-SET,reject,DIRECT
-  - RULE-SET,icloud,DIRECT
-  - RULE-SET,apple,DIRECT
-  - RULE-SET,google,PROXY
+  - DOMAIN,jiannlee22panel.ccwu.cc,DIRECT
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,lan,DIRECT
+  - DOMAIN-SUFFIX,ntp.org,DIRECT
+  - DOMAIN-SUFFIX,ntp.aliyun.com,DIRECT
+  - DOMAIN-SUFFIX,ntp.tencent.com,DIRECT
+  - DOMAIN-SUFFIX,time.apple.com,DIRECT
+  - DOMAIN-SUFFIX,time.windows.com,DIRECT
+  - DOMAIN-SUFFIX,time.cloudflare.com,DIRECT
+  - RULE-SET,direct-priority,DIRECT
+  - RULE-SET,reject,REJECT
   - RULE-SET,proxy,PROXY
   - RULE-SET,direct,DIRECT
-  - RULE-SET,lancidr,DIRECT
-  - RULE-SET,cncidr,DIRECT
-  - RULE-SET,telegramcidr,PROXY
-  - GEOIP,LAN,DIRECT
+  - RULE-SET,cn-ip,DIRECT
+  - RULE-SET,telegram-ip,PROXY
   - GEOIP,CN,DIRECT
   - MATCH,PROXY
 `;
@@ -307,8 +286,19 @@ export function renderClashConfig(template: string, nodes: VergeNode[]): string 
   return result;
 }
 
-export function clashConfig(nodes: VergeNode[], template?: string): string {
-  return renderClashConfig(template || DEFAULT_CLASH_TEMPLATE, nodes);
+export const DEFAULT_RULES_BASE = "https://jiannlee22panel.ccwu.cc";
+
+// Rule providers are served by this Worker under /rules/. The subscription
+// origin is used when available so the workers.dev fallback and local dev
+// keep working without editing the stored template.
+export function clashConfig(
+  nodes: VergeNode[],
+  template?: string,
+  rulesBase?: string,
+): string {
+  const rendered = renderClashConfig(template || DEFAULT_CLASH_TEMPLATE, nodes);
+  const base = (rulesBase || DEFAULT_RULES_BASE).replace(/\/+$/, "");
+  return rendered.replaceAll("{{RULES_BASE}}", base);
 }
 
 export async function getIdentityNodes(env: Env, identityId: string): Promise<VergeNode[]> {
@@ -406,8 +396,12 @@ export async function exportVerge(env: Env, identityId: string) {
   return vergeScript(nodes);
 }
 
-export async function exportClash(env: Env, identityId: string) {
+export async function exportClash(
+  env: Env,
+  identityId: string,
+  rulesBase?: string,
+) {
   const nodes = await getIdentityNodes(env, identityId);
   const custom = await getSubTemplate(env);
-  return clashConfig(nodes, custom || undefined);
+  return clashConfig(nodes, custom || undefined, rulesBase);
 }

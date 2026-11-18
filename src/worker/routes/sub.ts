@@ -24,7 +24,7 @@ export async function subRoutes(request: Request, env: Env): Promise<Response> {
   }
   assert(id && /^[a-f0-9-]{36}$/.test(id), "Valid subscription token or identity required", 400);
 
-  const yaml = await exportClash(env, id);
+  const yaml = await exportClash(env, id, url.origin);
 
   const headers = new Headers({
     "Content-Type": "text/yaml; charset=utf-8",

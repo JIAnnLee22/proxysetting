@@ -36,7 +36,7 @@ npm run deploy
 
 Basic凭据只通过HTTPS传输；浏览器会缓存登录，没有内置退出按钮，共享设备建议用隐私窗口，使用后关闭整个隐私会话。修改ADMIN_PASSWORD并重新部署可轮换密码，现有设备凭据不受影响。密码不要放在URL/命令历史/公开日志；脚本访问可用 `curl -u admin https://<worker>/api/admin/state` 交互输入密码。
 
-部署后检查：首页与构建后的JS/CSS返回200；匿名state返回200及 `isAdmin: false`，正确管理员密码返回200及 `isAdmin: true`，错误密码返回401。设备无凭据返回JSON 401且不带Basic挑战/Access重定向，有效设备凭据应正常同步。管理员管理写请求仍必须同源JSON。需要Secret/Release的功能在缺少配置时清晰503，不能绕过。
+部署后检查：首页与构建后的JS/CSS返回200；`/rules/manifest.json` 与 `/rules/reject.mrs` 返回200，`Cache-Control: public, max-age=3600`，后者为 `application/octet-stream`；匿名state返回200及 `isAdmin: false`，正确管理员密码返回200及 `isAdmin: true`，错误密码返回401。订阅模板若曾保存为自定义版本，需在“导出 → 配置模板 → 恢复默认”重新载入才会使用新的自托管规则集。设备无凭据返回JSON 401且不带Basic挑战/Access重定向，有效设备凭据应正常同步。管理员管理写请求仍必须同源JSON。需要Secret/Release的功能在缺少配置时清晰503，不能绕过。
 
 ## 数据、备份与预算
 ```

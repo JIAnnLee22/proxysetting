@@ -314,7 +314,7 @@ export async function adminRoutes(
     const format = new URL(request.url).searchParams.get("format");
     assert(id, "identity required");
     if (format === "clash" || format === "yaml") {
-      const yaml = await exportClash(env, id);
+      const yaml = await exportClash(env, id, new URL(request.url).origin);
       return new Response(yaml, {
         headers: {
           "Content-Type": "text/yaml; charset=utf-8",
