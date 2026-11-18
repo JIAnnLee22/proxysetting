@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "source": {
+    "repo": "Loyalsoldier/clash-rules",
+    "commit": "430d8ba3689e1c5e968c4625630f32dac2c77cef",
+    "date": "2026-10-28T22:35:53Z"
+  },
+  "generator": {
+    "mihomo": "Mihomo Meta 1.19.32 linux amd64 with go1.26.8 unknown time"
+  },
+  "precedence": [
+    "direct-priority",
+    "reject",
+    "proxy",
+    "direct",
+    "cn-ip",
+    "telegram-ip"
+  ],
+  "files": {
+    "direct-priority.mrs": {
+      "behavior": "domain",
+      "entries": 181,
+      "bytes": 1288,
+      "sha256": "45021ae53a571328f0bfab5172198406e8ba975a5f887a78c6394b6b4ddddfd5"
+    },
+    "reject.mrs": {
+      "behavior": "domain",
+      "entries": 193914,
+      "bytes": 1875440,
+      "sha256": "7caacf93b46447622542768b42ac7f30c47fb7f73b6fc5e200ce03ca8fc2cb87"
+    },
+    "proxy.mrs": {
+      "behavior": "domain",
+      "entries": 26468,
+      "bytes": 192942,
+      "sha256": "a05a064e5d389bb073af1d2544ba5ac1f4dc73402a600b8ffdcb3288ca97a890"
+    },
+    "direct.mrs": {
+      "behavior": "domain",
+      "entries": 109531,
+      "bytes": 527061,
+      "sha256": "f398b6053b2fc3c38a91e0624f464fd617b0ce4b4bc4df4f6027d25708f05791"
+    },
+    "cn-ip.mrs": {
+      "behavior": "ipcidr",
+      "entries": 10039,
+      "bytes": 38651,
+      "sha256": "90bea299f4431abc5dbb37336285ca74e9dde1f165e09b4ad624350bfaa15d0a"
+    },
+    "telegram-ip.mrs": {
+      "behavior": "ipcidr",
+      "entries": 12,
+      "bytes": 145,
+      "sha256": "d121af95b9aeca3d8c29b2112d5e6685b2a6716383df8ae31b5fbb3408c527b3"
+    },
+    "applications.yaml": {
+      "behavior": "classical",
+      "entries": 98,
+      "bytes": 2821,
+      "sha256": "33bc8f07bacf74082fcb5f361eded1f6f9d3abcedcbe37ada2eb2ab4ae031732"
+    }
+  }
+}

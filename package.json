@@ -10,6 +10,7 @@
     "deploy": "npm run build:web && wrangler deploy",
     "typecheck": "tsc --noEmit && vue-tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
+    "rules:update": "node scripts/build-rules.mjs",
     "db:local": "wrangler d1 migrations apply proxysetting --local",
     "db:remote": "wrangler d1 migrations apply proxysetting --remote",
     "verify": "npm run build:web && npm run typecheck && npm test && npm run db:local && wrangler deploy --dry-run"

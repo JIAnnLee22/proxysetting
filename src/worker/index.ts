@@ -61,6 +61,24 @@ export default {
         );
     }
     const headers = new Headers(response.headers);
+    const rulesPath = new URL(request.url).pathname;
+    if (rulesPath.startsWith("/rules/") && (response.status === 200 || response.status === 304)) {
+      // Rule providers are public, versioned by content, and revalidated with
+      // ETag/Last-Modified. Do not inherit the no-store used by the panel.
+      const extension = rulesPath.split(".").pop() || "";
+      headers.set("Cache-Control", "public, max-age=3600");
+      headers.set(
+        "Content-Type",
+        extension === "mrs"
+          ? "application/octet-stream"
+          : extension === "json"
+            ? "application/json; charset=utf-8"
+            : "text/yaml; charset=utf-8",
+      );
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("X-Content-Type-Options", "nosniff");
+      return new Response(response.body, { status: response.status, headers });
+    }
     headers.set("Cache-Control", "no-store");
     headers.set("X-Content-Type-Options", "nosniff");
     headers.set("Referrer-Policy", "no-referrer");
